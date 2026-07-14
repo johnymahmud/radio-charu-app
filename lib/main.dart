@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'community_panel.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -251,7 +252,7 @@ class _RadioHomePageState extends State<RadioHomePage> {
               _buildPlayerSection(),
               _buildStationSection(),
               _buildSocialSection(),
-              _buildCommunityPreview(),
+              const CommunityPanel(),
               const SizedBox(height: 28),
             ],
           ),
