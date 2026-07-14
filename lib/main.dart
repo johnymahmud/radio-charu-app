@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 void main() {
@@ -59,6 +60,12 @@ class _RadioHomePageState extends State<RadioHomePage> {
       'https://sapircast.caster.fm:17055/admin/publicstats.json';
 
   static const String _mountPoint = '/hQJ4i';
+  
+  static final Uri _facebookUrl =
+    Uri.parse('https://www.facebook.com/CharuTV/');
+
+  static final Uri _youtubeUrl =
+    Uri.parse('https://www.youtube.com/@RadioCharu');
 
   late final WebViewController _playerController;
   Timer? _statusTimer;
@@ -200,7 +207,22 @@ class _RadioHomePageState extends State<RadioHomePage> {
       });
     }
   }
+  Future<void> _openSocialLink(Uri url) async {
+  final bool opened = await launchUrl(
+    url,
+    mode: LaunchMode.externalApplication,
+  );
 
+  if (!opened && mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'লিংকটি খোলা যাচ্ছে না। আবার চেষ্টা করুন।',
+        ),
+      ),
+    );
+  }
+}
   Future<void> _reloadPlayer() async {
     setState(() {
       _playerLoading = true;
@@ -226,6 +248,7 @@ class _RadioHomePageState extends State<RadioHomePage> {
               _buildStatusSection(),
               _buildPlayerSection(),
               _buildStationSection(),
+              _buildSocialSection(),
               _buildCommunityPreview(),
               const SizedBox(height: 28),
             ],
@@ -548,7 +571,108 @@ class _RadioHomePageState extends State<RadioHomePage> {
       ),
     );
   }
-
+Widget _buildSocialSection() {
+  return Padding(
+    padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+    child: Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: folkWhite,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: folkOrange,
+          width: 3,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: folkYellow,
+            offset: Offset(6, 6),
+            blurRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionTitle(
+            icon: Icons.connect_without_contact_rounded,
+            title: 'FOLLOW RADIO CHARU',
+            color: folkOrange,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'আমাদের সামাজিক যোগাযোগমাধ্যমে যুক্ত থাকুন',
+            style: TextStyle(
+              color: folkInk,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => _openSocialLink(_facebookUrl),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: folkGreen,
+                    foregroundColor: folkWhite,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 15,
+                      horizontal: 10,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  icon: const Icon(
+                    Icons.facebook_rounded,
+                    size: 24,
+                  ),
+                  label: const Text(
+                    'FACEBOOK',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => _openSocialLink(_youtubeUrl),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: folkRed,
+                    foregroundColor: folkWhite,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 15,
+                      horizontal: 10,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  icon: const Icon(
+                    Icons.smart_display_rounded,
+                    size: 25,
+                  ),
+                  label: const Text(
+                    'YOUTUBE',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
   Widget _buildCommunityPreview() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
