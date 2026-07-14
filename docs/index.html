@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1"
+  />
+
+  <title>RADIO CHARU Player</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      background: #fff8df;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      padding: 12px;
+    }
+
+    .player-card {
+      width: 100%;
+      overflow: hidden;
+      background: #ffffff;
+      border: 4px solid #d62828;
+      border-radius: 18px;
+      box-shadow: 6px 6px 0 #f4b400;
+    }
+
+    .player-title {
+      padding: 10px 14px;
+      color: #ffffff;
+      background: #138a36;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-align: center;
+    }
+
+    .player-area {
+      padding: 10px;
+      background: #ffffff;
+    }
+  </style>
+</head>
+
+<body>
+  <main class="player-card">
+    <div class="player-title">RADIO CHARU LIVE</div>
+
+    <div class="player-area">
+      <div
+        data-type="newStreamPlayer"
+        data-publicToken="28172898-da7b-4d30-b562-3cddbc7ab3cd"
+        data-theme="light"
+        data-color="e81e4d"
+        data-channelId="a22628a4-78bc-4a33-8395-e132bb362feb"
+        data-rendered="false"
+        class="cstrEmbed"
+      >
+        <a href="https://www.caster.fm">Shoutcast Hosting</a>
+        <a href="https://www.caster.fm">Stream Hosting</a>
+        <a href="https://www.caster.fm">Radio Server Hosting</a>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.cloud.caster.fm/widgets/embed.js"></script>
+</body>
+</html>
