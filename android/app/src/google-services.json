@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "788606510187",
+    "project_id": "radio-charu-app",
+    "storage_bucket": "radio-charu-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:788606510187:android:ab87cf0ab2e5d65297bd2e",
+        "android_client_info": {
+          "package_name": "com.charu.radioapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBCDQaF1PNtyaOytxxr-GGfNn7ReY7bMEM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
