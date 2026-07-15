@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:app_settings/app_settings.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'community_panel.dart';
 
@@ -119,6 +120,25 @@ class _RadioHomePageState extends State<RadioHomePage>
       (_) => _loadRadioStatus(),
     );
   }
+
+Future<void> _openBackgroundPlaybackSettings() async {
+  try {
+    await AppSettings.openAppSettings(
+      type: AppSettingsType.batteryOptimization,
+    );
+  } catch (error) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Battery settings খোলা যায়নি। ফোনের Settings থেকে Radio Charu-এর Background Activity চালু করুন।',
+        ),
+        duration: Duration(seconds: 4),
+      ),
+    );
+  }
+}
 
 @override
 void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -557,6 +577,86 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
               ),
             ),
           ),
+        const SizedBox(height: 14),
+
+Container(
+  width: double.infinity,
+  padding: const EdgeInsets.all(16),
+  decoration: BoxDecoration(
+    color: const Color(0xFFF4FFF7),
+    borderRadius: BorderRadius.circular(22),
+    border: Border.all(
+      color: folkGreen,
+      width: 2,
+    ),
+  ),
+  child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Icon(
+            Icons.settings_rounded,
+            color: folkGreen,
+            size: 26,
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'BACKGROUND PLAYBACK',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 10),
+      const Text(
+        'স্ক্রিন লক থাকলেও রেডিও চালু রাখতে Battery Settings থেকে “Allow background activity” অথবা “Unrestricted” নির্বাচন করুন।',
+        style: TextStyle(
+          fontSize: 14,
+          height: 1.4,
+        ),
+      ),
+      const SizedBox(height: 6),
+      const Text(
+        'এই সেটিং সাধারণত একবারই করতে হয়।',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      const SizedBox(height: 12),
+      SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: _openBackgroundPlaybackSettings,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: folkGreen,
+            side: BorderSide(
+              color: folkGreen,
+              width: 2,
+            ),
+            padding: const EdgeInsets.symmetric(
+              vertical: 13,
+            ),
+          ),
+          icon: const Icon(Icons.open_in_new_rounded),
+          label: const Text(
+            'OPEN BATTERY SETTINGS',
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ),
+      ),
+    ],
+  ),
+),
         ],
       ),
     );
