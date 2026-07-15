@@ -766,6 +766,13 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
             color: folkRed,
           ),
           const SizedBox(height: 10),
+
+          _AnimatedRadioSpectrum(
+            isActive: _onAir,
+          ),
+
+          const SizedBox(height: 12),
+
           Container(
             height: 405,
             decoration: BoxDecoration(
@@ -1099,6 +1106,232 @@ class _StatusBox extends StatelessWidget {
               color: color,
               fontSize: 14,
               fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnimatedRadioSpectrum extends StatefulWidget {
+  const _AnimatedRadioSpectrum({
+    required this.isActive,
+  });
+
+  final bool isActive;
+
+  @override
+  State<_AnimatedRadioSpectrum> createState() =>
+      _AnimatedRadioSpectrumState();
+}
+
+class _AnimatedRadioSpectrumState extends State<_AnimatedRadioSpectrum>
+    with SingleTickerProviderStateMixin {
+  static const List<double> _phaseOffsets = [
+    0.00,
+    0.18,
+    0.43,
+    0.71,
+    0.27,
+    0.58,
+    0.86,
+    0.12,
+    0.37,
+    0.65,
+    0.93,
+    0.22,
+    0.49,
+    0.77,
+    0.33,
+    0.61,
+    0.89,
+  ];
+
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1350),
+    );
+
+    if (widget.isActive) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(
+    covariant _AnimatedRadioSpectrum oldWidget,
+  ) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.isActive == widget.isActive) return;
+
+    if (widget.isActive) {
+      _controller.repeat();
+    } else {
+      _controller
+        ..stop()
+        ..value = 0.0;
+    }
+  }
+
+  double _barHeight(int index) {
+    if (!widget.isActive) {
+      return 8.0 + ((index % 5) * 1.6);
+    }
+
+    final double phase =
+        (_controller.value + _phaseOffsets[index]) % 1.0;
+
+    final double primaryWave =
+        1.0 - ((phase * 2.0) - 1.0).abs();
+
+    final double shiftedPhase = (phase + 0.37) % 1.0;
+
+    final double secondaryWave =
+        1.0 - ((shiftedPhase * 2.0) - 1.0).abs();
+
+    return 8.0 +
+        (primaryWave * 28.0) +
+        (secondaryWave * 10.0);
+  }
+
+  Color _barColor(int index) {
+    switch (index % 3) {
+      case 0:
+        return folkRed;
+      case 1:
+        return folkYellow;
+      default:
+        return folkGreen;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 96,
+      padding: const EdgeInsets.fromLTRB(16, 11, 16, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF10351F),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: widget.isActive
+              ? folkGreen
+              : Colors.white24,
+          width: 2,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: folkYellow,
+            offset: Offset(5, 5),
+            blurRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 9,
+                height: 9,
+                decoration: BoxDecoration(
+                  color: widget.isActive
+                      ? folkRed
+                      : Colors.white38,
+                  shape: BoxShape.circle,
+                  boxShadow: widget.isActive
+                      ? [
+                          const BoxShadow(
+                            color: folkRed,
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ]
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                widget.isActive
+                    ? 'ON AIR RHYTHM'
+                    : 'SIGNAL STANDBY',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                widget.isActive ? 'LIVE' : 'OFF AIR',
+                style: TextStyle(
+                  color: widget.isActive
+                      ? folkYellow
+                      : Colors.white54,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (
+                BuildContext context,
+                Widget? child,
+              ) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: List<Widget>.generate(
+                    _phaseOffsets.length,
+                    (int index) {
+                      final Color color = _barColor(index);
+
+                      return Expanded(
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Container(
+                            width: 5,
+                            height: _barHeight(index),
+                            decoration: BoxDecoration(
+                              color: color,
+                              borderRadius:
+                                  BorderRadius.circular(99),
+                              boxShadow: widget.isActive
+                                  ? [
+                                      BoxShadow(
+                                        color: color.withAlpha(90),
+                                        blurRadius: 6,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
             ),
           ),
         ],
