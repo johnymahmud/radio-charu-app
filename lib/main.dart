@@ -55,7 +55,8 @@ class RadioHomePage extends StatefulWidget {
   State<RadioHomePage> createState() => _RadioHomePageState();
 }
 
-class _RadioHomePageState extends State<RadioHomePage> {
+class _RadioHomePageState extends State<RadioHomePage>
+    with WidgetsBindingObserver {
   static const String _playerUrl =
       'https://johnymahmud.github.io/radio-charu-app/';
 
@@ -83,10 +84,12 @@ class _RadioHomePageState extends State<RadioHomePage> {
   String _stationName = 'RADIO CHARU';
   String _description = 'বাংলাদেশ থেকে ভালোবাসার সম্প্রচার';
   String _statusMessage = 'লাইভ স্ট্যাটাস দেখা হচ্ছে...';
+  bool _wasBackgrounded = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     _playerController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -117,11 +120,41 @@ class _RadioHomePageState extends State<RadioHomePage> {
     );
   }
 
+@override
+void didChangeAppLifecycleState(AppLifecycleState state) {
+  super.didChangeAppLifecycleState(state);
+
+  if (state == AppLifecycleState.paused ||
+      state == AppLifecycleState.inactive ||
+      state == AppLifecycleState.hidden) {
+    _wasBackgrounded = true;
+    return;
+  }
+
+  if (state == AppLifecycleState.resumed && _wasBackgrounded) {
+    _wasBackgrounded = false;
+
+    if (!mounted) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('অ্যাপ আবার সক্রিয় হয়েছে।'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    });
+  }
+}
+
   @override
   void dispose() {
-    _statusTimer?.cancel();
-    super.dispose();
-  }
+    WidgetsBinding.instance.removeObserver(this);
+   _statusTimer?.cancel();
+  super.dispose();
+}
 
   Future<void> _loadRadioStatus() async {
     if (mounted) {
