@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:app_settings/app_settings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'community_panel.dart';
 
@@ -87,10 +88,21 @@ class _RadioHomePageState extends State<RadioHomePage>
   String _statusMessage = 'লাইভ স্ট্যাটাস দেখা হচ্ছে...';
   bool _wasBackgrounded = false;
 
+  static const String _backgroundPlaybackDoneKey =
+    'background_playback_setup_done';
+  static const String _backgroundPlaybackSnoozeUntilKey =
+    'background_playback_snooze_until';
+
+final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
+
+bool _waitingForBackgroundSettings = false;
+bool _backgroundDialogOpen = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(_scheduleBackgroundPlaybackPrompt());
 
     _playerController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -121,18 +133,263 @@ class _RadioHomePageState extends State<RadioHomePage>
     );
   }
 
+Future<void> _scheduleBackgroundPlaybackPrompt() async {
+  final bool setupDone =
+      await _preferences.getBool(_backgroundPlaybackDoneKey) ?? false;
+
+  if (setupDone) return;
+
+  final int snoozeUntil = await _preferences.getInt(
+        _backgroundPlaybackSnoozeUntilKey,
+      ) ??
+      0;
+
+  if (DateTime.now().millisecondsSinceEpoch < snoozeUntil) {
+    return;
+  }
+
+  await Future<void>.delayed(
+    const Duration(milliseconds: 1500),
+  );
+
+  if (!mounted || _backgroundDialogOpen) return;
+
+  await _showBackgroundPlaybackDialog();
+}
+
+Future<void> _showBackgroundPlaybackDialog() async {
+  if (!mounted || _backgroundDialogOpen) return;
+
+  _backgroundDialogOpen = true;
+
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (BuildContext dialogContext) {
+      return Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(26),
+        ),
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 26, 22, 22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 58,
+                    height: 58,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFE7F8EC),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.lock_clock_rounded,
+                      color: folkGreen,
+                      size: 32,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Screen Lock-এও Radio শুনুন',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 21,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'স্ক্রিন লক থাকলেও রেডিও চালু রাখতে Radio Charu-এর Battery Settings থেকে “Allow background activity”, “Allow background usage” অথবা “Unrestricted” চালু করুন।',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'এই সেটিং সাধারণত একবারই করতে হয়।',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.of(dialogContext).pop();
+
+                        unawaited(
+                          _openBackgroundPlaybackSettings(),
+                        );
+                      },
+                      style: FilledButton.styleFrom(
+                        backgroundColor: folkGreen,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 14,
+                        ),
+                      ),
+                      icon: const Icon(
+                        Icons.settings_rounded,
+                      ),
+                      label: const Text(
+                        'OPEN SETTINGS',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                tooltip: 'Close',
+                onPressed: () async {
+                  final int snoozeUntil = DateTime.now()
+                      .add(const Duration(days: 3))
+                      .millisecondsSinceEpoch;
+
+                  await _preferences.setInt(
+                    _backgroundPlaybackSnoozeUntilKey,
+                    snoozeUntil,
+                  );
+
+                  if (!dialogContext.mounted) return;
+
+                  Navigator.of(dialogContext).pop();
+                },
+                icon: const Icon(
+                  Icons.close_rounded,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+
+  _backgroundDialogOpen = false;
+}
+
+Future<void> _showBackgroundPlaybackConfirmationDialog() async {
+  if (!mounted || _backgroundDialogOpen) return;
+
+  _backgroundDialogOpen = true;
+
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (BuildContext dialogContext) {
+      return AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        icon: const Icon(
+          Icons.check_circle_outline_rounded,
+          color: folkGreen,
+          size: 46,
+        ),
+        title: const Text(
+          'Background Playback চালু করেছেন?',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        content: const Text(
+          'Radio Charu-এর Battery Settings থেকে Background Activity অথবা Background Usage চালু করা হয়ে থাকলে DONE চাপুন।',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            height: 1.4,
+          ),
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          OutlinedButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+
+              unawaited(
+                _openBackgroundPlaybackSettings(),
+              );
+            },
+            child: const Text(
+              'OPEN AGAIN',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          FilledButton(
+            onPressed: () async {
+              await _preferences.setBool(
+                _backgroundPlaybackDoneKey,
+                true,
+              );
+
+              if (!dialogContext.mounted) return;
+
+              Navigator.of(dialogContext).pop();
+
+              if (!mounted) return;
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Background playback setup সম্পন্ন হয়েছে।',
+                  ),
+                  duration: Duration(seconds: 3),
+                ),
+              );
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: folkGreen,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text(
+              'DONE',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+
+  _backgroundDialogOpen = false;
+}
+
 Future<void> _openBackgroundPlaybackSettings() async {
+  _waitingForBackgroundSettings = true;
+
   try {
     await AppSettings.openAppSettings(
-      type: AppSettingsType.batteryOptimization,
+      type: AppSettingsType.settings,
     );
   } catch (error) {
+    _waitingForBackgroundSettings = false;
+
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-          'Battery settings খোলা যায়নি। ফোনের Settings থেকে Radio Charu-এর Background Activity চালু করুন।',
+          'Settings খোলা যায়নি। ফোনের Settings থেকে Radio Charu-এর Battery অথবা Background Activity চালু করুন।',
         ),
         duration: Duration(seconds: 4),
       ),
@@ -151,19 +408,19 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
     return;
   }
 
-  if (state == AppLifecycleState.resumed && _wasBackgrounded) {
-    _wasBackgrounded = false;
+ if (state == AppLifecycleState.resumed && _wasBackgrounded) {
+  _wasBackgrounded = false;
 
-    if (!mounted) return;
+  if (!mounted) return;
+
+  if (_waitingForBackgroundSettings) {
+    _waitingForBackgroundSettings = false;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('অ্যাপ আবার সক্রিয় হয়েছে।'),
-          duration: Duration(seconds: 2),
-        ),
+      unawaited(
+        _showBackgroundPlaybackConfirmationDialog(),
       );
     });
   }
@@ -577,86 +834,6 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
               ),
             ),
           ),
-        const SizedBox(height: 14),
-
-Container(
-  width: double.infinity,
-  padding: const EdgeInsets.all(16),
-  decoration: BoxDecoration(
-    color: const Color(0xFFF4FFF7),
-    borderRadius: BorderRadius.circular(22),
-    border: Border.all(
-      color: folkGreen,
-      width: 2,
-    ),
-  ),
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        children: [
-          Icon(
-            Icons.settings_rounded,
-            color: folkGreen,
-            size: 26,
-          ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Text(
-              'BACKGROUND PLAYBACK',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0.4,
-              ),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 10),
-      const Text(
-        'স্ক্রিন লক থাকলেও রেডিও চালু রাখতে Battery Settings থেকে “Allow background activity” অথবা “Unrestricted” নির্বাচন করুন।',
-        style: TextStyle(
-          fontSize: 14,
-          height: 1.4,
-        ),
-      ),
-      const SizedBox(height: 6),
-      const Text(
-        'এই সেটিং সাধারণত একবারই করতে হয়।',
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      const SizedBox(height: 12),
-      SizedBox(
-        width: double.infinity,
-        child: OutlinedButton.icon(
-          onPressed: _openBackgroundPlaybackSettings,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: folkGreen,
-            side: BorderSide(
-              color: folkGreen,
-              width: 2,
-            ),
-            padding: const EdgeInsets.symmetric(
-              vertical: 13,
-            ),
-          ),
-          icon: const Icon(Icons.open_in_new_rounded),
-          label: const Text(
-            'OPEN BATTERY SETTINGS',
-            style: TextStyle(
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0.4,
-            ),
-          ),
-        ),
-      ),
-    ],
-  ),
-),
         ],
       ),
     );
