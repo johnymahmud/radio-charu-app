@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:audio_session/audio_session.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
@@ -71,6 +73,14 @@ class _RadioHomePageState extends State<RadioHomePage> {
     Uri.parse('https://www.youtube.com/@RadioCharu');
 
   late final WebViewController _playerController;
+  final AudioPlayer _nativePlayer = AudioPlayer();
+
+  bool _nativeAudioReady = false;
+  bool _nativeAudioTesting = false;
+
+  String? _nativeStreamUrl;
+  String? _nativeAudioError;
+
   Timer? _statusTimer;
 
   bool _playerLoading = true;
@@ -87,6 +97,7 @@ class _RadioHomePageState extends State<RadioHomePage> {
   @override
   void initState() {
     super.initState();
+    unawaited(_configureAudioSession());
 
     _playerController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -116,12 +127,37 @@ class _RadioHomePageState extends State<RadioHomePage> {
       (_) => _loadRadioStatus(),
     );
   }
+  
+  Future<void> _configureAudioSession() async {
+  try {
+    final session = await AudioSession.instance;
+
+    await session.configure(
+      AudioSessionConfiguration.music(),
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _nativeAudioReady = true;
+      _nativeAudioError = null;
+    });
+  } catch (error) {
+    if (!mounted) return;
+
+    setState(() {
+      _nativeAudioReady = false;
+      _nativeAudioError = 'Audio session setup failed: $error';
+    });
+  }
+}
 
   @override
   void dispose() {
-    _statusTimer?.cancel();
-    super.dispose();
-  }
+  _statusTimer?.cancel();
+  unawaited(_nativePlayer.dispose());
+  super.dispose();
+ }
 
   Future<void> _loadRadioStatus() async {
     if (mounted) {
@@ -226,6 +262,117 @@ class _RadioHomePageState extends State<RadioHomePage> {
     );
   }
 }
+  Future<void> _testNativePlayback() async {
+  if (_nativeAudioTesting) return;
+
+  if (!_nativeAudioReady) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Native audio এখনো প্রস্তুত হয়নি।'),
+      ),
+    );
+    return;
+  }
+
+  setState(() {
+    _nativeAudioTesting = true;
+    _nativeAudioError = null;
+  });
+
+  try {
+    final dynamic result =
+        await _playerController.runJavaScriptReturningResult(
+      '''
+      (() => {
+        const audio =
+          document.getElementById('playerAudioElement') ||
+          document.querySelector('audio');
+
+        if (!audio) return '';
+
+        return audio.currentSrc || audio.src || '';
+      })()
+      ''',
+    );
+
+    String streamUrl = result.toString().trim();
+
+    try {
+      final dynamic decoded = jsonDecode(streamUrl);
+      if (decoded is String) {
+        streamUrl = decoded;
+      }
+    } catch (_) {
+      streamUrl = streamUrl.replaceAll('"', '');
+    }
+
+    if (streamUrl.startsWith('//')) {
+      streamUrl = 'https:$streamUrl';
+    }
+
+    if (streamUrl.isEmpty ||
+        (!streamUrl.startsWith('https://') &&
+            !streamUrl.startsWith('http://'))) {
+      throw Exception(
+        'Stream URL পাওয়া যায়নি। আগে Web Player-এর Play চাপুন।',
+      );
+    }
+
+    await _nativePlayer.stop();
+    await _nativePlayer.setUrl(streamUrl);
+
+    await _playerController.runJavaScript(
+      '''
+      (() => {
+        const audio =
+          document.getElementById('playerAudioElement') ||
+          document.querySelector('audio');
+
+        if (audio) audio.pause();
+      })()
+      ''',
+    );
+
+    final AudioSession session = await AudioSession.instance;
+    final bool activated = await session.setActive(true);
+
+    if (!activated) {
+      throw Exception('Android audio session চালু করা যায়নি।');
+    }
+
+    unawaited(_nativePlayer.play());
+
+    if (!mounted) return;
+
+    setState(() {
+      _nativeStreamUrl = streamUrl;
+      _nativeAudioTesting = false;
+      _nativeAudioError = null;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Native audio playback শুরু হয়েছে।'),
+      ),
+    );
+  } catch (error) {
+    await _nativePlayer.stop();
+
+    if (!mounted) return;
+
+    setState(() {
+      _nativeAudioTesting = false;
+      _nativeAudioError = error.toString();
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Native playback test ব্যর্থ: $error'),
+      ),
+    );
+  }
+}
+  
   Future<void> _reloadPlayer() async {
     setState(() {
       _playerLoading = true;
@@ -504,30 +651,100 @@ class _RadioHomePageState extends State<RadioHomePage> {
               ),
             ),
           ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _reloadPlayer,
-              style: FilledButton.styleFrom(
-                backgroundColor: folkOrange,
-                foregroundColor: folkWhite,
-                padding: const EdgeInsets.symmetric(vertical: 13),
-              ),
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text(
-                'RELOAD PLAYER',
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.5,
-                ),
-              ),
+
+       const SizedBox(height: 14),
+
+SizedBox(
+  width: double.infinity,
+  child: FilledButton.icon(
+    onPressed: _nativeAudioTesting ? null : _testNativePlayback,
+    style: FilledButton.styleFrom(
+      backgroundColor: folkGreen,
+      foregroundColor: folkWhite,
+      padding: const EdgeInsets.symmetric(
+        vertical: 16,
+        horizontal: 16,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+      ),
+    ),
+    icon: _nativeAudioTesting
+        ? const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.4,
+              color: folkWhite,
             ),
+          )
+        : const Icon(
+            Icons.graphic_eq_rounded,
+            size: 24,
           ),
+    label: Text(
+      _nativeAudioTesting
+          ? 'CONNECTING NATIVE AUDIO...'
+          : 'TEST NATIVE AUDIO',
+      style: const TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w900,
+      ),
+    ),
+  ),
+),
+
+if (_nativeStreamUrl != null)
+  const Padding(
+    padding: EdgeInsets.only(top: 10),
+    child: Text(
+      '✓ Native stream connected',
+      style: TextStyle(
+        color: folkGreen,
+        fontSize: 13,
+        fontWeight: FontWeight.w800,
+      ),
+    ),
+  ),
+
+if (_nativeAudioError != null)
+  Padding(
+    padding: const EdgeInsets.only(top: 10),
+    child: Text(
+      _nativeAudioError!,
+      style: const TextStyle(
+        color: folkRed,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  ),
+
+const SizedBox(height: 14),
+
+SizedBox(
+  width: double.infinity,
+  child: FilledButton.icon(
+    onPressed: _reloadPlayer,
+    style: FilledButton.styleFrom(
+      backgroundColor: folkOrange,
+      foregroundColor: folkWhite,
+      padding: const EdgeInsets.symmetric(vertical: 13),
+    ),
+    icon: const Icon(Icons.refresh_rounded),
+    label: const Text(
+      'RELOAD PLAYER',
+      style: TextStyle(
+        fontWeight: FontWeight.w900,
+        letterSpacing: 0.5,
+      ),
+    ),
+  ),
+), 
         ],
       ),
     );
-  }
+  }  
 
   Widget _buildStationSection() {
     return Padding(
