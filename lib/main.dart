@@ -425,6 +425,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
     });
   }
 }
+}
 
   @override
   void dispose() {
