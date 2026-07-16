@@ -98,6 +98,11 @@ final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
 bool _waitingForBackgroundSettings = false;
 bool _backgroundDialogOpen = false;
 
+bool _directPlayerMode = false;
+bool _directPlayerOpening = false;
+bool _playbackTrackingReady = false;
+bool _smartResumeRunning = false;
+
   @override
   void initState() {
     super.initState();
@@ -115,12 +120,54 @@ bool _backgroundDialogOpen = false;
               _playerLoading = true;
             });
           },
-          onPageFinished: (_) {
-            if (!mounted) return;
-            setState(() {
-              _playerLoading = false;
-            });
-          },
+         onPageFinished: (String url) {
+  if (!mounted) return;
+
+  final bool isDirectCasterPage = url.startsWith(
+    'https://widgets.cloud.caster.fm/player/',
+  );
+
+  setState(() {
+    _playerLoading = false;
+    _directPlayerMode = isDirectCasterPage;
+    _playbackTrackingReady = false;
+
+    if (isDirectCasterPage) {
+      _directPlayerOpening = false;
+    }
+  });
+
+  if (isDirectCasterPage) {
+    unawaited(
+      Future<void>.delayed(
+        const Duration(milliseconds: 500),
+        () async {
+          if (!mounted || !_directPlayerMode) return;
+
+          await _installPlaybackTracking();
+        },
+      ),
+    );
+
+    return;
+  }
+
+  if (url.startsWith(_playerUrl) &&
+      !_directPlayerOpening) {
+    _directPlayerOpening = true;
+
+    unawaited(
+      Future<void>.delayed(
+        const Duration(milliseconds: 900),
+        () async {
+          if (!mounted) return;
+
+          await _openDirectCasterPlayer();
+        },
+      ),
+    );
+  }
+},
         ),
       )
       ..loadRequest(Uri.parse(_playerUrl));
@@ -414,16 +461,21 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
   if (!mounted) return;
 
   if (_waitingForBackgroundSettings) {
-    _waitingForBackgroundSettings = false;
+  _waitingForBackgroundSettings = false;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!mounted) return;
 
-      unawaited(
-        _showBackgroundPlaybackConfirmationDialog(),
-      );
-    });
-  }
+    unawaited(
+      _showBackgroundPlaybackConfirmationDialog(),
+    );
+  });
+
+  return;
+}
+
+unawaited(_attemptSmartResume());
+
 }
 }
 
@@ -545,6 +597,350 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
     await _playerController.reload();
     await _loadRadioStatus();
   }
+
+Future<void> _installPlaybackTracking() async {
+  if (!_directPlayerMode) return;
+
+  try {
+    await _playerController.runJavaScript(
+      r'''
+      (() => {
+        if (window.__radioTrackingInstalled) {
+          return;
+        }
+
+        window.__radioTrackingInstalled = true;
+        window.__radioUserWantsPlayback = false;
+        window.__radioLastUserAction = 'none';
+        window.__radioLastUserActionAt = 0;
+
+        document.addEventListener(
+          'click',
+          (event) => {
+            const target =
+              event.target instanceof Element
+                ? event.target
+                : null;
+
+            const button = target
+              ? target.closest(
+                  'button, [role="button"]'
+                )
+              : null;
+
+            if (!button) return;
+
+            const text = (
+              button.innerText ||
+              button.getAttribute('aria-label') ||
+              button.getAttribute('title') ||
+              ''
+            )
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            if (/^play$/i.test(text)) {
+              window.__radioUserWantsPlayback = true;
+              window.__radioLastUserAction = 'play';
+              window.__radioLastUserActionAt = Date.now();
+            }
+
+            if (/^pause$/i.test(text)) {
+              window.__radioUserWantsPlayback = false;
+              window.__radioLastUserAction = 'pause';
+              window.__radioLastUserActionAt = Date.now();
+            }
+          },
+          true
+        );
+      })()
+      ''',
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _playbackTrackingReady = true;
+    });
+  } catch (_) {
+    if (!mounted) return;
+
+    setState(() {
+      _playbackTrackingReady = false;
+    });
+  }
+}
+
+Future<bool> _attemptSmartResume() async {
+  if (!mounted ||
+      !_directPlayerMode ||
+      !_playbackTrackingReady ||
+      _smartResumeRunning) {
+    return false;
+  }
+
+  _smartResumeRunning = true;
+
+  try {
+    await Future<void>.delayed(
+      const Duration(milliseconds: 350),
+    );
+
+    if (!mounted || !_directPlayerMode) {
+      return false;
+    }
+
+    final Object rawResult =
+        await _playerController.runJavaScriptReturningResult(
+      r'''
+      (() => {
+        const audio = document.querySelector('audio');
+
+        const wantsPlayback =
+          window.__radioUserWantsPlayback === true;
+
+        const buttons = Array.from(
+          document.querySelectorAll(
+            'button, [role="button"]'
+          )
+        );
+
+        const isVisible = (element) => {
+          const style =
+            window.getComputedStyle(element);
+
+          return style.display !== 'none' &&
+              style.visibility !== 'hidden' &&
+              element.offsetParent !== null;
+        };
+
+        const playButton = buttons.find(
+          (button) => {
+            const text = (
+              button.innerText ||
+              button.getAttribute('aria-label') ||
+              button.getAttribute('title') ||
+              ''
+            )
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            return /^play$/i.test(text) &&
+                isVisible(button);
+          }
+        );
+
+        const result = {
+          audioFound: Boolean(audio),
+          resumeWanted: wantsPlayback,
+          beforePaused:
+            audio ? audio.paused : null,
+          action: 'none',
+          error: '',
+        };
+
+        if (!audio) {
+          result.action = 'audio-not-found';
+          return JSON.stringify(result);
+        }
+
+        if (!wantsPlayback) {
+          result.action = 'resume-not-wanted';
+          return JSON.stringify(result);
+        }
+
+        if (!audio.paused) {
+          result.action = 'already-playing';
+          return JSON.stringify(result);
+        }
+
+        window.__radioAutoResumeError = '';
+
+        if (playButton) {
+          playButton.click();
+          result.action = 'clicked-visible-play';
+          return JSON.stringify(result);
+        }
+
+        try {
+          const playResult = audio.play();
+
+          if (playResult && playResult.catch) {
+            playResult.catch((error) => {
+              window.__radioAutoResumeError =
+                String(error);
+            });
+          }
+
+          result.action = 'called-audio-play';
+        } catch (error) {
+          result.action = 'play-call-failed';
+          result.error = String(error);
+        }
+
+        return JSON.stringify(result);
+      })()
+      ''',
+    );
+
+    String resultText = rawResult.toString();
+
+    try {
+      final dynamic firstDecode =
+          jsonDecode(resultText);
+
+      if (firstDecode is String) {
+        resultText = firstDecode;
+      }
+    } catch (_) {}
+
+    Map<String, dynamic>? result;
+
+    try {
+      final dynamic decoded =
+          jsonDecode(resultText);
+
+      if (decoded is Map<String, dynamic>) {
+        result = decoded;
+      }
+    } catch (_) {}
+
+    if (result == null) {
+      return false;
+    }
+
+    final String action =
+        result['action']?.toString() ?? '';
+
+    if (action == 'already-playing') {
+      return true;
+    }
+
+    if (action != 'clicked-visible-play' &&
+        action != 'called-audio-play') {
+      return false;
+    }
+
+    await Future<void>.delayed(
+      const Duration(milliseconds: 2600),
+    );
+
+    if (!mounted || !_directPlayerMode) {
+      return false;
+    }
+
+    final Object verificationRaw =
+        await _playerController
+            .runJavaScriptReturningResult(
+      r'''
+      (() => {
+        const audio = document.querySelector('audio');
+
+        return JSON.stringify({
+          audioFound: Boolean(audio),
+          paused: audio ? audio.paused : null,
+          readyState:
+            audio ? audio.readyState : null,
+          networkState:
+            audio ? audio.networkState : null,
+          error:
+            window.__radioAutoResumeError || '',
+        });
+      })()
+      ''',
+    );
+
+    String verificationText =
+        verificationRaw.toString();
+
+    try {
+      final dynamic firstDecode =
+          jsonDecode(verificationText);
+
+      if (firstDecode is String) {
+        verificationText = firstDecode;
+      }
+    } catch (_) {}
+
+    try {
+      final dynamic verification =
+          jsonDecode(verificationText);
+
+      if (verification is Map<String, dynamic>) {
+        return verification['audioFound'] == true &&
+            verification['paused'] == false;
+      }
+    } catch (_) {}
+
+    return false;
+  } catch (_) {
+    return false;
+  } finally {
+    _smartResumeRunning = false;
+  }
+}
+
+Future<void> _openDirectCasterPlayer() async {
+  try {
+    final Object rawResult =
+        await _playerController.runJavaScriptReturningResult(
+      r'''
+      (() => {
+        const frame = document.querySelector(
+          'iframe[src*="widgets.cloud.caster.fm"]'
+        );
+
+        return frame ? frame.src : '';
+      })()
+      ''',
+    );
+
+    String widgetUrl = rawResult.toString().trim();
+
+    try {
+      final dynamic decoded = jsonDecode(widgetUrl);
+
+      if (decoded is String) {
+        widgetUrl = decoded;
+      }
+    } catch (_) {
+      widgetUrl = widgetUrl.replaceAll('"', '');
+    }
+
+    if (!widgetUrl.startsWith(
+      'https://widgets.cloud.caster.fm/',
+    )) {
+      throw Exception(
+        'Caster widget URL পাওয়া যায়নি।',
+      );
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _playerLoading = true;
+    });
+
+    await _playerController.loadRequest(
+      Uri.parse(widgetUrl),
+    );
+  } catch (error) {
+    if (!mounted) return;
+
+    setState(() {
+      _playerLoading = false;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'রেডিও প্লেয়ার চালু করা যায়নি। আবার চেষ্টা করুন। ($error)',
+        ),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+}
 
   @override
   Widget build(BuildContext context) {
