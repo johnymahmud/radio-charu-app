@@ -776,6 +776,82 @@ Future<void> _checkPlayerState() async {
   }
 }
 
+Future<void> _openDirectCasterPlayer() async {
+  try {
+    final Object rawResult =
+        await _playerController.runJavaScriptReturningResult(
+      r'''
+      (() => {
+        const frame = document.querySelector(
+          'iframe[src*="widgets.cloud.caster.fm"]'
+        );
+
+        return frame ? frame.src : '';
+      })()
+      ''',
+    );
+
+    String widgetUrl = rawResult.toString().trim();
+
+    try {
+      final dynamic decoded = jsonDecode(widgetUrl);
+
+      if (decoded is String) {
+        widgetUrl = decoded;
+      }
+    } catch (_) {
+      widgetUrl = widgetUrl.replaceAll('"', '');
+    }
+
+    if (!widgetUrl.startsWith(
+      'https://widgets.cloud.caster.fm/',
+    )) {
+      throw Exception(
+        'Caster widget URL পাওয়া যায়নি।',
+      );
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _playerLoading = true;
+    });
+
+    await _playerController.loadRequest(
+      Uri.parse(widgetUrl),
+    );
+  } catch (error) {
+    if (!mounted) return;
+
+    setState(() {
+      _playerLoading = false;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Direct player test চালু করা যায়নি: $error',
+        ),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+}
+
+Future<void> _restoreWrappedPlayer() async {
+  if (!mounted) return;
+
+  setState(() {
+    _playerLoading = true;
+  });
+
+  await _playerController.loadRequest(
+    Uri.parse(_playerUrl),
+  );
+
+  await _loadRadioStatus();
+}
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1094,6 +1170,61 @@ SizedBox(
     ),
     label: const Text(
       'CHECK PLAYER STATE',
+      style: TextStyle(
+        fontWeight: FontWeight.w900,
+        letterSpacing: 0.4,
+      ),
+    ),
+  ),
+),
+
+const SizedBox(height: 10),
+
+SizedBox(
+  width: double.infinity,
+  child: FilledButton.icon(
+    onPressed: _openDirectCasterPlayer,
+    style: FilledButton.styleFrom(
+      backgroundColor: folkRed,
+      foregroundColor: Colors.white,
+      padding: const EdgeInsets.symmetric(
+        vertical: 13,
+      ),
+    ),
+    icon: const Icon(
+      Icons.open_in_browser_rounded,
+    ),
+    label: const Text(
+      'TEST DIRECT PLAYER',
+      style: TextStyle(
+        fontWeight: FontWeight.w900,
+        letterSpacing: 0.4,
+      ),
+    ),
+  ),
+),
+
+const SizedBox(height: 10),
+
+SizedBox(
+  width: double.infinity,
+  child: OutlinedButton.icon(
+    onPressed: _restoreWrappedPlayer,
+    style: OutlinedButton.styleFrom(
+      foregroundColor: folkGreen,
+      side: const BorderSide(
+        color: folkGreen,
+        width: 2,
+      ),
+      padding: const EdgeInsets.symmetric(
+        vertical: 13,
+      ),
+    ),
+    icon: const Icon(
+      Icons.restore_page_rounded,
+    ),
+    label: const Text(
+      'RESTORE NORMAL PLAYER',
       style: TextStyle(
         fontWeight: FontWeight.w900,
         letterSpacing: 0.4,
