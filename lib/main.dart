@@ -852,6 +852,198 @@ Future<void> _restoreWrappedPlayer() async {
   await _loadRadioStatus();
 }
 
+Future<void> _testDirectResume() async {
+  try {
+    final Object initialRaw =
+        await _playerController.runJavaScriptReturningResult(
+      r'''
+      (() => {
+        const audio = document.querySelector('audio');
+
+        const buttons = Array.from(
+          document.querySelectorAll('button')
+        );
+
+        const isVisible = (element) => {
+          const style = window.getComputedStyle(element);
+
+          return style.display !== 'none' &&
+              style.visibility !== 'hidden' &&
+              element.offsetParent !== null;
+        };
+
+        const playButton = buttons.find((button) => {
+          const text =
+            (button.innerText || '').trim();
+
+          return /^play$/i.test(text) &&
+              isVisible(button);
+        });
+
+        const result = {
+          audioFound: Boolean(audio),
+          beforePaused: audio ? audio.paused : null,
+          beforeReadyState: audio ? audio.readyState : null,
+          beforeNetworkState: audio ? audio.networkState : null,
+          visiblePlayFound: Boolean(playButton),
+          action: 'none',
+          error: '',
+        };
+
+        if (!audio) {
+          result.action = 'audio-not-found';
+          return JSON.stringify(result);
+        }
+
+        if (!audio.paused) {
+          result.action = 'already-playing';
+          return JSON.stringify(result);
+        }
+
+        window.__radioResumeError = '';
+
+        if (playButton) {
+          playButton.click();
+          result.action = 'clicked-visible-play';
+          return JSON.stringify(result);
+        }
+
+        try {
+          const playResult = audio.play();
+
+          if (playResult && playResult.catch) {
+            playResult.catch((error) => {
+              window.__radioResumeError =
+                String(error);
+            });
+          }
+
+          result.action = 'called-audio-play';
+        } catch (error) {
+          result.action = 'play-call-failed';
+          result.error = String(error);
+        }
+
+        return JSON.stringify(result);
+      })()
+      ''',
+    );
+
+    await Future<void>.delayed(
+      const Duration(milliseconds: 1800),
+    );
+
+    final Object finalRaw =
+        await _playerController.runJavaScriptReturningResult(
+      r'''
+      (() => {
+        const audio = document.querySelector('audio');
+
+        return JSON.stringify({
+          audioFound: Boolean(audio),
+          afterPaused: audio ? audio.paused : null,
+          afterEnded: audio ? audio.ended : null,
+          afterCurrentTime:
+            audio ? audio.currentTime : null,
+          afterReadyState:
+            audio ? audio.readyState : null,
+          afterNetworkState:
+            audio ? audio.networkState : null,
+          resumeError:
+            window.__radioResumeError || '',
+        });
+      })()
+      ''',
+    );
+
+    String initialText = initialRaw.toString();
+    String finalText = finalRaw.toString();
+
+    try {
+      final dynamic decoded = jsonDecode(initialText);
+
+      if (decoded is String) {
+        initialText = decoded;
+      }
+    } catch (_) {}
+
+    try {
+      final dynamic decoded = jsonDecode(finalText);
+
+      if (decoded is String) {
+        finalText = decoded;
+      }
+    } catch (_) {}
+
+    String readableInitial = initialText;
+    String readableFinal = finalText;
+
+    try {
+      readableInitial = const JsonEncoder.withIndent(
+        '  ',
+      ).convert(jsonDecode(initialText));
+    } catch (_) {}
+
+    try {
+      readableFinal = const JsonEncoder.withIndent(
+        '  ',
+      ).convert(jsonDecode(finalText));
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text(
+            'RESUME ENGINE TEST',
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          content: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight:
+                  MediaQuery.of(dialogContext).size.height *
+                      0.58,
+            ),
+            child: SingleChildScrollView(
+              child: SelectableText(
+                'ATTEMPT\n$readableInitial\n\n'
+                'RESULT\n$readableFinal',
+                style: const TextStyle(
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('CLOSE'),
+            ),
+          ],
+        );
+      },
+    );
+  } catch (error) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Resume engine test ব্যর্থ হয়েছে: $error',
+        ),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+}
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1196,6 +1388,32 @@ SizedBox(
     ),
     label: const Text(
       'TEST DIRECT PLAYER',
+      style: TextStyle(
+        fontWeight: FontWeight.w900,
+        letterSpacing: 0.4,
+      ),
+    ),
+  ),
+),
+
+const SizedBox(height: 10),
+
+SizedBox(
+  width: double.infinity,
+  child: FilledButton.icon(
+    onPressed: _testDirectResume,
+    style: FilledButton.styleFrom(
+      backgroundColor: folkGreen,
+      foregroundColor: Colors.white,
+      padding: const EdgeInsets.symmetric(
+        vertical: 13,
+      ),
+    ),
+    icon: const Icon(
+      Icons.play_circle_outline_rounded,
+    ),
+    label: const Text(
+      'TEST RESUME ENGINE',
       style: TextStyle(
         fontWeight: FontWeight.w900,
         letterSpacing: 0.4,
