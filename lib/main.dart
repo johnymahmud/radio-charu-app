@@ -914,7 +914,7 @@ Future<bool> _attemptSmartResume() async {
 
   try {
     await Future<void>.delayed(
-      const Duration(milliseconds: 1500),
+      const Duration(milliseconds: 350),
     );
 
     if (!mounted || !_directPlayerMode) {
