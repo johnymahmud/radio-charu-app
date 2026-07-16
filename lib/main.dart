@@ -546,6 +546,236 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
     await _loadRadioStatus();
   }
 
+Future<void> _checkPlayerState() async {
+  try {
+    final Object rawResult =
+        await _playerController.runJavaScriptReturningResult(
+      r'''
+      (() => {
+        const clean = (value) =>
+          (value ?? '')
+            .toString()
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        const roots = [document];
+
+        for (let rootIndex = 0; rootIndex < roots.length; rootIndex++) {
+          const elements = Array.from(
+            roots[rootIndex].querySelectorAll('*')
+          );
+
+          for (const element of elements) {
+            if (element.shadowRoot) {
+              roots.push(element.shadowRoot);
+            }
+          }
+        }
+
+        const queryAll = (selector) => {
+          const results = [];
+
+          for (const root of roots) {
+            results.push(
+              ...Array.from(root.querySelectorAll(selector))
+            );
+          }
+
+          return results;
+        };
+
+        const buttonNodes = queryAll(
+          'button, [role="button"], input[type="button"], input[type="submit"]'
+        );
+
+        const playerButtons = buttonNodes
+          .map((node, index) => {
+            const text = clean(
+              node.innerText ||
+              node.value ||
+              node.getAttribute('aria-label') ||
+              node.getAttribute('title')
+            );
+
+            return {
+              index,
+              tag: node.tagName,
+              text,
+              id: node.id || '',
+              className: clean(node.className),
+            };
+          })
+          .filter((item) =>
+            /play|pause|resume|stop/i.test(item.text)
+          )
+          .slice(0, 20);
+
+        const audios = queryAll('audio').map(
+          (audio, index) => ({
+            index,
+            paused: audio.paused,
+            ended: audio.ended,
+            muted: audio.muted,
+            currentTime: audio.currentTime,
+            readyState: audio.readyState,
+            networkState: audio.networkState,
+            currentSrc: audio.currentSrc || '',
+            src: audio.src || '',
+          })
+        );
+
+        const iframes = queryAll('iframe').map(
+          (frame, index) => {
+            let access = 'blocked';
+            let childAudioCount = null;
+            let childPlayerButtons = [];
+
+            try {
+              const childDocument =
+                frame.contentDocument ||
+                (
+                  frame.contentWindow &&
+                  frame.contentWindow.document
+                );
+
+              if (childDocument) {
+                access = 'accessible';
+
+                childAudioCount =
+                  childDocument.querySelectorAll('audio').length;
+
+                childPlayerButtons = Array.from(
+                  childDocument.querySelectorAll(
+                    'button, [role="button"]'
+                  )
+                )
+                  .map((button) =>
+                    clean(
+                      button.innerText ||
+                      button.getAttribute('aria-label') ||
+                      button.getAttribute('title')
+                    )
+                  )
+                  .filter((text) =>
+                    /play|pause|resume|stop/i.test(text)
+                  )
+                  .slice(0, 10);
+              }
+            } catch (error) {
+              access =
+                'blocked:' +
+                (
+                  error && error.name
+                    ? error.name
+                    : 'security-error'
+                );
+            }
+
+            return {
+              index,
+              src: frame.getAttribute('src') || '',
+              title: frame.getAttribute('title') || '',
+              access,
+              childAudioCount,
+              childPlayerButtons,
+            };
+          }
+        );
+
+        return JSON.stringify({
+          pageUrl: location.href,
+          pageTitle: document.title,
+          readyState: document.readyState,
+          visibilityState: document.visibilityState,
+          hasFocus: document.hasFocus(),
+          rootCount: roots.length,
+          audioCount: audios.length,
+          iframeCount: iframes.length,
+          playerButtonCount: playerButtons.length,
+          playerButtons,
+          audios,
+          iframes,
+        });
+      })()
+      ''',
+    );
+
+    String resultText = rawResult.toString();
+
+    try {
+      final dynamic firstDecode = jsonDecode(resultText);
+
+      if (firstDecode is String) {
+        resultText = firstDecode;
+      }
+    } catch (_) {
+      // Some Android WebView versions already return a plain string.
+    }
+
+    String readableResult;
+
+    try {
+      final dynamic decodedResult = jsonDecode(resultText);
+
+      readableResult = const JsonEncoder.withIndent(
+        '  ',
+      ).convert(decodedResult);
+    } catch (_) {
+      readableResult = resultText;
+    }
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text(
+            'PLAYER DIAGNOSTIC',
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          content: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight:
+                  MediaQuery.of(dialogContext).size.height * 0.60,
+            ),
+            child: SingleChildScrollView(
+              child: SelectableText(
+                readableResult,
+                style: const TextStyle(
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('CLOSE'),
+            ),
+          ],
+        );
+      },
+    );
+  } catch (error) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Player diagnostic ব্যর্থ হয়েছে: $error',
+        ),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+}
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -842,6 +1072,36 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
               ),
             ),
           ),
+
+const SizedBox(height: 10),
+
+SizedBox(
+  width: double.infinity,
+  child: OutlinedButton.icon(
+    onPressed: _checkPlayerState,
+    style: OutlinedButton.styleFrom(
+      foregroundColor: folkGreen,
+      side: const BorderSide(
+        color: folkGreen,
+        width: 2,
+      ),
+      padding: const EdgeInsets.symmetric(
+        vertical: 13,
+      ),
+    ),
+    icon: const Icon(
+      Icons.manage_search_rounded,
+    ),
+    label: const Text(
+      'CHECK PLAYER STATE',
+      style: TextStyle(
+        fontWeight: FontWeight.w900,
+        letterSpacing: 0.4,
+      ),
+    ),
+  ),
+),
+
         ],
       ),
     );
