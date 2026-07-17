@@ -27,7 +27,8 @@ class _CommunityPanelState extends State<CommunityPanel> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _commentController = TextEditingController();
   final TextEditingController _adminEmailController = TextEditingController();
-  final TextEditingController _adminPasswordController = TextEditingController();
+  final TextEditingController _adminPasswordController =
+      TextEditingController();
   final TextEditingController _shoutController = TextEditingController();
 
   StreamSubscription<User?>? _authSubscription;
@@ -120,8 +121,10 @@ class _CommunityPanelState extends State<CommunityPanel> {
 
   Future<void> _loadCurrentShout() async {
     try {
-      final DocumentSnapshot<Map<String, dynamic>> document =
-          await _firestore.collection('shouts').doc('current').get();
+      final DocumentSnapshot<Map<String, dynamic>> document = await _firestore
+          .collection('shouts')
+          .doc('current')
+          .get();
       final String message =
           document.data()?['message']?.toString().trim() ?? '';
 
@@ -146,8 +149,7 @@ class _CommunityPanelState extends State<CommunityPanel> {
     });
 
     try {
-      final UserCredential credential =
-          await _auth.signInWithEmailAndPassword(
+      final UserCredential credential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
@@ -284,13 +286,14 @@ class _CommunityPanelState extends State<CommunityPanel> {
     });
 
     try {
-      await _firestore.collection('shouts').doc('current').set(
-        <String, dynamic>{
-          'message': message,
-          'adminUid': _auth.currentUser!.uid,
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-      );
+      await _firestore
+          .collection('shouts')
+          .doc('current')
+          .set(<String, dynamic>{
+            'message': message,
+            'adminUid': _auth.currentUser!.uid,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
       _showSnackBar('Admin Shout প্রকাশিত হয়েছে।');
     } on FirebaseException {
       _showSnackBar('Shout প্রকাশ করা যাচ্ছে না।');
@@ -308,7 +311,8 @@ class _CommunityPanelState extends State<CommunityPanel> {
 
     final bool confirmed = await _confirmAction(
       title: 'Shout সরাবেন?',
-      message: 'বর্তমান Admin Shout সকল ব্যবহারকারীর অ্যাপ থেকে সরিয়ে দেওয়া হবে।',
+      message:
+          'বর্তমান Admin Shout সকল ব্যবহারকারীর অ্যাপ থেকে সরিয়ে দেওয়া হবে।',
       confirmLabel: 'REMOVE',
     );
 
@@ -418,10 +422,7 @@ class _CommunityPanelState extends State<CommunityPanel> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
   }
 
@@ -600,9 +601,7 @@ class _CommunityPanelState extends State<CommunityPanel> {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            _isAdmin
-                ? 'Admin mode চালু আছে'
-                : 'Live community সংযোগ প্রস্তুত',
+            _isAdmin ? 'Admin mode চালু আছে' : 'Live community সংযোগ প্রস্তুত',
             style: const TextStyle(
               color: _folkInk,
               fontSize: 13,
@@ -710,89 +709,90 @@ class _CommunityPanelState extends State<CommunityPanel> {
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: _firestore.collection('shouts').doc('current').snapshots(),
-      builder: (
-        BuildContext context,
-        AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snapshot,
-      ) {
-        if (snapshot.hasError) {
-          return _messageCard(
-            icon: Icons.warning_amber_rounded,
-            title: 'SHOUT পাওয়া যাচ্ছে না',
-            message: 'ইন্টারনেট সংযোগ পরীক্ষা করুন।',
-            color: _folkOrange,
-          );
-        }
+      builder:
+          (
+            BuildContext context,
+            AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snapshot,
+          ) {
+            if (snapshot.hasError) {
+              return _messageCard(
+                icon: Icons.warning_amber_rounded,
+                title: 'SHOUT পাওয়া যাচ্ছে না',
+                message: 'ইন্টারনেট সংযোগ পরীক্ষা করুন।',
+                color: _folkOrange,
+              );
+            }
 
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: CircularProgressIndicator(color: _folkRed),
-            ),
-          );
-        }
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator(color: _folkRed),
+                ),
+              );
+            }
 
-        final Map<String, dynamic>? data = snapshot.data?.data();
-        final String message = data?['message']?.toString().trim() ?? '';
+            final Map<String, dynamic>? data = snapshot.data?.data();
+            final String message = data?['message']?.toString().trim() ?? '';
 
-        if (message.isEmpty) {
-          return _messageCard(
-            icon: Icons.notifications_none_rounded,
-            title: 'ADMIN SHOUT',
-            message: 'এই মুহূর্তে কোনো বিশেষ ঘোষণা নেই।',
-            color: _folkGreen,
-          );
-        }
+            if (message.isEmpty) {
+              return _messageCard(
+                icon: Icons.notifications_none_rounded,
+                title: 'ADMIN SHOUT',
+                message: 'এই মুহূর্তে কোনো বিশেষ ঘোষণা নেই।',
+                color: _folkGreen,
+              );
+            }
 
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: _folkRed,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _folkWhite, width: 3),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const Row(
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _folkRed,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _folkWhite, width: 3),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Icon(Icons.campaign_rounded, color: _folkWhite, size: 23),
-                  SizedBox(width: 8),
+                  const Row(
+                    children: <Widget>[
+                      Icon(Icons.campaign_rounded, color: _folkWhite, size: 23),
+                      SizedBox(width: 8),
+                      Text(
+                        'ADMIN SHOUT',
+                        style: TextStyle(
+                          color: _folkWhite,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
                   Text(
-                    'ADMIN SHOUT',
-                    style: TextStyle(
+                    message,
+                    style: const TextStyle(
                       color: _folkWhite,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.5,
+                      fontSize: 16,
+                      height: 1.45,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'আপডেট: ${_formatTimestamp(data?['updatedAt'])}',
+                    style: const TextStyle(
+                      color: _folkWhite,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              Text(
-                message,
-                style: const TextStyle(
-                  color: _folkWhite,
-                  fontSize: 16,
-                  height: 1.45,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'আপডেট: ${_formatTimestamp(data?['updatedAt'])}',
-                style: const TextStyle(
-                  color: _folkWhite,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+            );
+          },
     );
   }
 
@@ -1020,55 +1020,82 @@ class _CommunityPanelState extends State<CommunityPanel> {
           stream: _firestore
               .collection('comments')
               .orderBy('createdAt', descending: true)
-              .limit(30)
               .snapshots(),
-          builder: (
-            BuildContext context,
-            AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-          ) {
-            if (snapshot.hasError) {
-              return _messageCard(
-                icon: Icons.warning_amber_rounded,
-                title: 'COMMENTS পাওয়া যাচ্ছে না',
-                message: 'ইন্টারনেট সংযোগ অথবা Firestore Rules পরীক্ষা করুন।',
-                color: _folkRed,
-              );
-            }
+          builder:
+              (
+                BuildContext context,
+                AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
+              ) {
+                if (snapshot.hasError) {
+                  return _messageCard(
+                    icon: Icons.warning_amber_rounded,
+                    title: 'COMMENTS পাওয়া যাচ্ছে না',
+                    message:
+                        'ইন্টারনেট সংযোগ অথবা Firestore Rules পরীক্ষা করুন।',
+                    color: _folkRed,
+                  );
+                }
 
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(18),
-                  child: CircularProgressIndicator(color: _folkGreen),
-                ),
-              );
-            }
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(18),
+                      child: CircularProgressIndicator(color: _folkGreen),
+                    ),
+                  );
+                }
 
-            final List<QueryDocumentSnapshot<Map<String, dynamic>>> documents =
-                snapshot.data?.docs ??
+                final List<QueryDocumentSnapshot<Map<String, dynamic>>>
+                documents =
+                    snapshot.data?.docs ??
                     <QueryDocumentSnapshot<Map<String, dynamic>>>[];
 
-            if (documents.isEmpty) {
-              return _messageCard(
-                icon: Icons.chat_bubble_outline_rounded,
-                title: 'প্রথম মন্তব্যটি আপনিই লিখুন',
-                message: 'এখনো কোনো Live Comment প্রকাশিত হয়নি।',
-                color: _folkGreen,
-              );
-            }
+                if (documents.isEmpty) {
+                  return _messageCard(
+                    icon: Icons.chat_bubble_outline_rounded,
+                    title: 'প্রথম মন্তব্যটি আপনিই লিখুন',
+                    message: 'এখনো কোনো Live Comment প্রকাশিত হয়নি।',
+                    color: _folkGreen,
+                  );
+                }
 
-            return ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: documents.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (BuildContext context, int index) {
-                final QueryDocumentSnapshot<Map<String, dynamic>> document =
-                    documents[index];
-                return _buildCommentCard(document);
+                return Container(
+                  // Five compact comment rows remain visible; older comments
+                  // stay available by scrolling within this single panel.
+                  height: 388,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: _folkWhite,
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: _folkInk, width: 1.5),
+                  ),
+                  child: Scrollbar(
+                    thumbVisibility: true,
+                    child: ListView.builder(
+                      padding: EdgeInsets.zero,
+                      itemExtent: 77,
+                      itemCount: documents.length,
+                      itemBuilder: (BuildContext context, int index) {
+                        final QueryDocumentSnapshot<Map<String, dynamic>>
+                        document = documents[index];
+                        final bool isLastComment =
+                            index == documents.length - 1;
+                        return Column(
+                          children: <Widget>[
+                            Expanded(child: _buildCommentCard(document)),
+                            if (!isLastComment)
+                              const SizedBox(
+                                height: 2,
+                                width: double.infinity,
+                                child: ColoredBox(color: Color(0xFF969696)),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                );
               },
-            );
-          },
         ),
       ],
     );
@@ -1086,15 +1113,8 @@ class _CommunityPanelState extends State<CommunityPanel> {
     final bool isOwnComment = _auth.currentUser?.uid == userId;
 
     return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _folkWhite,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(
-          color: isOwnComment ? _folkOrange : _folkInk,
-          width: isOwnComment ? 2 : 1,
-        ),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+      color: isOwnComment ? const Color(0xFFFFF0E5) : _folkWhite,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -1137,10 +1157,12 @@ class _CommunityPanelState extends State<CommunityPanel> {
                 const SizedBox(height: 6),
                 Text(
                   message,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: _folkInk,
                     fontSize: 14,
-                    height: 1.45,
+                    height: 1.3,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
