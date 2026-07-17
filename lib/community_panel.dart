@@ -1078,17 +1078,18 @@ class _CommunityPanelState extends State<CommunityPanel> {
                       itemBuilder: (BuildContext context, int index) {
                         final QueryDocumentSnapshot<Map<String, dynamic>>
                         document = documents[index];
-                        return DecoratedBox(
-                          decoration: BoxDecoration(
-                            border: index == documents.length - 1
-                                ? null
-                                : const Border(
-                                    bottom: BorderSide(
-                                      color: Color(0xFFE4DED4),
-                                    ),
-                                  ),
-                          ),
-                          child: _buildCommentCard(document),
+                        final bool isLastComment =
+                            index == documents.length - 1;
+                        return Column(
+                          children: <Widget>[
+                            Expanded(child: _buildCommentCard(document)),
+                            if (!isLastComment)
+                              const SizedBox(
+                                height: 2,
+                                width: double.infinity,
+                                child: ColoredBox(color: Color(0xFF969696)),
+                              ),
+                          ],
                         );
                       },
                     ),
