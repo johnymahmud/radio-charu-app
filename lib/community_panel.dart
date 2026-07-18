@@ -1084,10 +1084,13 @@ class _CommunityPanelState extends State<CommunityPanel> {
                           children: <Widget>[
                             Expanded(child: _buildCommentCard(document)),
                             if (!isLastComment)
-                              const SizedBox(
-                                height: 2,
-                                width: double.infinity,
-                                child: ColoredBox(color: Color(0xFF969696)),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 20),
+                                child: SizedBox(
+                                  height: 2,
+                                  width: double.infinity,
+                                  child: ColoredBox(color: Color(0xFF969696)),
+                                ),
                               ),
                           ],
                         );

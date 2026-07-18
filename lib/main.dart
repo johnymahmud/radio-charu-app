@@ -902,10 +902,10 @@ class _RadioHomePageState extends State<RadioHomePage>
                     const _FolkColorStrip(),
                     _buildStatusSection(),
                     _buildPlayerSection(),
-                    _buildStationSection(),
                     _buildSocialSection(),
                     const CommunityPanel(),
-                    const SizedBox(height: 28),
+                    _buildAboutButton(),
+                    const SizedBox(height: 12),
                   ],
                 ),
               ),
@@ -1084,17 +1084,10 @@ class _RadioHomePageState extends State<RadioHomePage>
 
   Widget _buildPlayerSection() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _SectionTitle(
-            icon: Icons.play_circle_fill_rounded,
-            title: 'LIVE PLAYER',
-            color: folkRed,
-          ),
-          const SizedBox(height: 10),
-
           _AnimatedRadioSpectrum(isActive: _onAir),
 
           const SizedBox(height: 12),
@@ -1166,46 +1159,105 @@ class _RadioHomePageState extends State<RadioHomePage>
     );
   }
 
-  Widget _buildStationSection() {
+  Widget _buildAboutButton() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: folkWhite,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: folkGreen, width: 3),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const _SectionTitle(
-              icon: Icons.info_rounded,
-              title: 'ABOUT THE STATION',
-              color: folkGreen,
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: TextButton.icon(
+          onPressed: _showStationAboutDialog,
+          icon: const Icon(Icons.info_outline_rounded, size: 16),
+          label: const Text(
+            'ABOUT',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
             ),
-            const SizedBox(height: 14),
-            Text(
-              _stationName,
-              style: const TextStyle(
-                color: folkRed,
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _description,
-              style: const TextStyle(
-                color: folkInk,
-                height: 1.5,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+          ),
+          style: TextButton.styleFrom(
+            foregroundColor: folkGreen,
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+          ),
         ),
       ),
+    );
+  }
+
+  Future<void> _showStationAboutDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 28, 22, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _SectionTitle(
+                      icon: Icons.info_rounded,
+                      title: 'ABOUT THE STATION',
+                      color: folkGreen,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      _stationName,
+                      style: const TextStyle(
+                        color: folkRed,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _description,
+                      style: const TextStyle(
+                        color: folkInk,
+                        height: 1.5,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: folkGreen,
+                          side: const BorderSide(color: folkGreen, width: 2),
+                        ),
+                        child: const Text(
+                          'CLOSE',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Positioned(
+                top: 6,
+                right: 6,
+                child: IconButton(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1420,25 +1472,7 @@ class _AnimatedRadioSpectrum extends StatefulWidget {
 
 class _AnimatedRadioSpectrumState extends State<_AnimatedRadioSpectrum>
     with SingleTickerProviderStateMixin {
-  static const List<double> _phaseOffsets = [
-    0.00,
-    0.18,
-    0.43,
-    0.71,
-    0.27,
-    0.58,
-    0.86,
-    0.12,
-    0.37,
-    0.65,
-    0.93,
-    0.22,
-    0.49,
-    0.77,
-    0.33,
-    0.61,
-    0.89,
-  ];
+  static const int _barCount = 30;
 
   late final AnimationController _controller;
 
@@ -1476,7 +1510,7 @@ class _AnimatedRadioSpectrumState extends State<_AnimatedRadioSpectrum>
       return 8.0 + ((index % 5) * 1.6);
     }
 
-    final double phase = (_controller.value + _phaseOffsets[index]) % 1.0;
+    final double phase = (_controller.value + ((index * 0.37) % 1.0)) % 1.0;
 
     final double primaryWave = 1.0 - ((phase * 2.0) - 1.0).abs();
 
@@ -1509,7 +1543,7 @@ class _AnimatedRadioSpectrumState extends State<_AnimatedRadioSpectrum>
     return Container(
       width: double.infinity,
       height: 96,
-      padding: const EdgeInsets.fromLTRB(16, 11, 16, 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: const Color(0xFF10351F),
         borderRadius: BorderRadius.circular(20),
@@ -1523,55 +1557,33 @@ class _AnimatedRadioSpectrumState extends State<_AnimatedRadioSpectrum>
       ),
       child: Column(
         children: [
-          Row(
+          const Row(
             children: [
-              Container(
-                width: 9,
-                height: 9,
-                decoration: BoxDecoration(
-                  color: widget.isActive ? folkRed : Colors.white38,
-                  shape: BoxShape.circle,
-                  boxShadow: widget.isActive
-                      ? [
-                          const BoxShadow(
-                            color: folkRed,
-                            blurRadius: 8,
-                            spreadRadius: 1,
-                          ),
-                        ]
-                      : null,
-                ),
+              Icon(
+                Icons.play_circle_fill_rounded,
+                color: folkGreen,
+                size: 20,
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 6),
               Text(
-                widget.isActive ? 'ON AIR RHYTHM' : 'SIGNAL STANDBY',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.8,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                widget.isActive ? 'LIVE' : 'OFF AIR',
+                'LIVE PLAYER',
                 style: TextStyle(
-                  color: widget.isActive ? folkYellow : Colors.white54,
-                  fontSize: 11,
+                  color: folkGreen,
+                  fontSize: 15,
                   fontWeight: FontWeight.w900,
-                  letterSpacing: 0.8,
+                  letterSpacing: 0.4,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Expanded(
             child: AnimatedBuilder(
               animation: _controller,
               builder: (BuildContext context, Widget? child) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
-                  children: List<Widget>.generate(_phaseOffsets.length, (
+                  children: List<Widget>.generate(_barCount, (
                     int index,
                   ) {
                     final Color color = _barColor(index);
