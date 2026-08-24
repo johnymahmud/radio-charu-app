@@ -64,3 +64,19 @@
    - [run_emulator.bat](../run_emulator.bat) স্ক্রিপ্ট তৈরি করা হয়েছে, যা স্টেল লক স্বয়ংক্রিয়ভাবে ক্লিন করে এবং Host GPU এক্সিলারেশন সহ চোখের পলকে এমুলেটর চালু করে।
 2. **Firebase Hosting আর্কিটেকচারাল অডিট:**
    - Caster.fm ব্রিজ হোস্টিংয়ের জন্য GitHub Pages-এর পাশাপাশি Firebase Hosting (`https://radiocharu.web.app`) এর সম্ভাব্যতা ও ফ্রি টিয়ার বিশ্লেষণ সম্পন্ন।
+
+---
+
+## 🗓️ ২০২৬-০৮-২৪ (সেশন ৪: ফায়ারবেজ মাল্টি-সাইট হোস্টিং ডিপ্লয় ও ডুয়াল ফ্রন্টএন্ড রোডম্যাপ)
+- **অংশগ্রহণকারী:** Johny Mahmud (Project Owner) & Antigravity AI Assistant
+- **সক্রিয় ব্রাঞ্চ:** `firebase_hosting_deploy`
+
+### 🎯 সম্পন্ন কার্যকলাপ:
+1. **Firebase Multi-Site Hosting ডিপ্লয়মেন্ট:**
+   - Firebase Hosting-এ `radiocharu` সাইট ক্রিয়েট ও ডিপ্লয় সম্পন্ন। লাইভ URL: [https://radiocharu.web.app/](https://radiocharu.web.app/)
+2. **Flutter অ্যাপ ইন্টিগ্রেশন:**
+   - [lib/main.dart](../lib/main.dart)-এ `_playerUrl` ভেরিয়েবল নতুন দ্রুতগতির `https://radiocharu.web.app/` লিংকে আপডেট করা হয়েছে।
+3. **ডুয়াল ফ্রন্টএন্ড আর্কিটেকচার ও ADR-005 নথিভুক্তকরণ:**
+   - [docs/DECISION_LOG.md](DECISION_LOG.md)-এ `ADR-005` (Flutter Native Mobile + Firebase Web Portal) যোগ করা হয়েছে।
+   - [docs/AUDIO_STREAMING_BLUEPRINT.md](AUDIO_STREAMING_BLUEPRINT.md)-এ সেকশন ৭ (Dual-Platform Ecosystem Architecture) যুক্ত করা হয়েছে।
+   - [docs/PROJECT_STATE.md](PROJECT_STATE.md)-এ Web Portal V2 Roadmap (লাইভ স্ট্যাটাস, কমেন্ট বক্স, আরজে শিডিউল) সংরক্ষিত হয়েছে।

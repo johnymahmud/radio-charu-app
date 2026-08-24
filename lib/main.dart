@@ -61,7 +61,7 @@ class RadioHomePage extends StatefulWidget {
 class _RadioHomePageState extends State<RadioHomePage>
     with WidgetsBindingObserver {
   static const String _playerUrl =
-      'https://johnymahmud.github.io/radio-charu-app/';
+      'https://radiocharu.web.app/';
 
   static const String _statusUrl =
       'https://sapircast.caster.fm:17055/admin/publicstats.json';

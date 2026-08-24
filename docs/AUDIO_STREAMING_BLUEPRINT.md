@@ -179,7 +179,7 @@ sequenceDiagram
 
 | Parameter / Element | Location in Code | Purpose / Value |
 | :--- | :--- | :--- |
-| **Bridge URL** | [main.dart:63-64](file:///d:/Personal/radio-charu-app/lib/main.dart#L63-L64) | `https://johnymahmud.github.io/radio-charu-app/` |
+| **Bridge URL** | [main.dart:63-64](file:///d:/Personal/radio-charu-app/lib/main.dart#L63-L64) | `https://radiocharu.web.app/` (Fallback: `https://johnymahmud.github.io/radio-charu-app/`) |
 | **Stats API URL** | [main.dart:66-67](file:///d:/Personal/radio-charu-app/lib/main.dart#L66-L67) | `https://sapircast.caster.fm:17055/admin/publicstats.json` |
 | **Mount Point** | [main.dart:69](file:///d:/Personal/radio-charu-app/lib/main.dart#L69) | `/hQJ4i` |
 | **Public Token** | [docs/index.html:63](file:///d:/Personal/radio-charu-app/docs/index.html#L63) | `28172898-da7b-4d30-b562-3cddbc7ab3cd` |
@@ -234,4 +234,46 @@ When testing or building the app, follow this verification checklist:
 
 ---
 
+## 7. Dual-Platform Ecosystem & Unified Backend Architecture
+
+Radio Charu utilizes a decoupled multi-frontend architecture where both the native mobile app and web portal function autonomously while consuming the exact same backend services:
+
+```mermaid
+graph TD
+    subgraph Central_Services ["🌐 Shared Zero-Cost Backend Infrastructure"]
+        C_Audio["Caster.fm Free Shoutcast Stream<br/>(sapircast.caster.fm:17055/hQJ4i)"]
+        C_Stats["Caster.fm PublicStats API<br/>(/admin/publicstats.json)"]
+        C_Firebase["Google Cloud Firestore<br/>(shouts/current & comments/{id})"]
+    end
+
+    subgraph Native_Mobile ["📱 Native Mobile App (Flutter / Dart)"]
+        F_Player["WebView Headless Controller<br/>(Iframe Breakout + Smart-Resume)"]
+        F_UI["Folk-Themed Native UI<br/>(Visualizer, ON-AIR Badge, Status Cards)"]
+        F_Chat["Flutter Firestore StreamBuilder<br/>(Real-Time Comments & Shouts)"]
+    end
+
+    subgraph Web_Portal ["💻 Web Portal (Firebase Hosting: radiocharu.web.app)"]
+        W_Player["Caster.fm Embed Player<br/>(docs/index.html)"]
+        W_UI["Responsive Web UI<br/>(Desktop Banner, RJ Schedule, Socials)"]
+        W_Chat["Firebase Web JS SDK<br/>(Web Comment Stream & Reactions)"]
+    end
+
+    C_Audio -->|DOM Click Bypass| F_Player
+    C_Audio -->|Direct Web Widget| W_Player
+
+    C_Stats -->|Dart http.get Polling| F_UI
+    C_Stats -->|JS fetch Polling| W_UI
+
+    C_Firebase <-->|Flutter SDK Sync| F_Chat
+    C_Firebase <-->|Firebase Web SDK Sync| W_Chat
+```
+
+### Architectural Guarantees:
+1. **Frontend Isolation:** Changes to the Flutter mobile app will never break the Web Portal, and vice versa.
+2. **Unified Community:** Comments submitted via the mobile app appear instantly on the web portal in real-time, and vice versa.
+3. **Redundant Hosting:** The audio bridge remains hosted concurrently on **Firebase Hosting** (`https://radiocharu.web.app/`) and **GitHub Pages** (`https://johnymahmud.github.io/radio-charu-app/`) ensuring 100% uptime redundancy.
+
+---
+
 *This blueprint is the official reference architecture for Radio Charu. Any architectural changes must comply with the constraints documented herein.*
+
