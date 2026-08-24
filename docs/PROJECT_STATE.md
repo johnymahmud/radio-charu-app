@@ -19,7 +19,7 @@ pie title প্রজেক্ট সমাপ্তির অগ্রগত�
 
 - [x] **Firebase Hosting লাইভ ব্রিজ:** Google Firebase Hosting-এ `https://radiocharu.web.app/` সফলভাবে ডিপ্লয়কৃত ও অ্যাপে কানেক্টেড।
 - [x] **Caster.fm ফ্রি-টিয়ার বাইপাস আর্কিটেকচার:** GitHub Pages ও Firebase Hosting ব্রিজ (`docs/index.html`), Iframe Breakout, DOM Click Interception (`/^play$/i`), এবং Lifecycle Smart-Resume ইঞ্জিন বাস্তবায়িত ও পরীক্ষিত।
-- [x] **Pixel 7 ১-ক্লিক ফাস্ট লঞ্চার:** [run_emulator.bat](../run_emulator.bat) তৈরি ও এমুলেটর লাইভ ভেরিফিকেশন সফল।
+- [x] **মাল্টি-পিসি ১-ক্লিক স্মার্ট এমুলেটর লঞ্চার:** [run_emulator.bat](../run_emulator.bat) আপগ্রেড করা হয়েছে, যা বাসা/অফিসের যেকোনো পিসিতে AVD স্বয়ংক্রিয়ভাবে ডিটেক্ট করে ১-ক্লিকে লঞ্চ নিশ্চিত করে।
 - [x] **ডিকাপল্ড লাইভ মেটাডাটা ও পোলিং:** প্রতি ১৫ সেকেন্ড পর পর `sapircast.caster.fm:17055/admin/publicstats.json` থেকে লিসেনার সংখ্যা, অন-এয়ার ব্যাজ ও ব্রডকাস্ট কোয়ালিটি রিয়েল-টাইম আপডেট সফল।
 - [x] **Pixel 7 লাইভ এমুলেটর ভেরিফিকেশন:** সরাসরি এমুলেটরে অ্যাপ চালিয়ে লাইভ অডিও স্ট্রিমিং (PAUSE/PLAY টগল, 96 KBPS কোয়ালিটি, লাইভ ভিজ্যুয়ালাইজার) সম্পূর্ণ সফলভাবে যাচাইকৃত।
 - [x] **কমিউনিটি প্যানেল ও ফায়ারবেজ চ্যাট:** Anonymous Auth + Admin Email/Pass Login, Live Shouts (`shouts/current`), এবং Live Comments (`comments/{id}`) সিকিউরিটি রুলস সহ সম্পূর্ণ।

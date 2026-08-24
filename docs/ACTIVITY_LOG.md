@@ -80,3 +80,16 @@
    - [docs/DECISION_LOG.md](DECISION_LOG.md)-এ `ADR-005` (Flutter Native Mobile + Firebase Web Portal) যোগ করা হয়েছে।
    - [docs/AUDIO_STREAMING_BLUEPRINT.md](AUDIO_STREAMING_BLUEPRINT.md)-এ সেকশন ৭ (Dual-Platform Ecosystem Architecture) যুক্ত করা হয়েছে।
    - [docs/PROJECT_STATE.md](PROJECT_STATE.md)-এ Web Portal V2 Roadmap (লাইভ স্ট্যাটাস, কমেন্ট বক্স, আরজে শিডিউল) সংরক্ষিত হয়েছে।
+
+---
+
+## 🗓️ ২০২৬-০৮-২৪ (সেশন ৫: মাল্টি-পিসি স্মার্ট এমুলেটর অটো-লঞ্চার বাস্তবায়ন)
+- **অংশগ্রহণকারী:** Johny Mahmud (Project Owner) & Antigravity AI Assistant
+- **সক্রিয় ব্রাঞ্চ:** `firebase_hosting_deploy`
+
+### 🎯 সম্পন্ন কার্যকলাপ:
+1. **মাল্টি-পিসি এনভায়রনমেন্ট অডিট:**
+   - বাসা ও অফিসের পিসির মধ্যে গিট সিঙ্কিংয়ের ক্ষেত্রে AVD নামের অমিল (`Pixel_7` vs `Pixel_8`) এবং পাওয়ারশেল সিনট্যাক্স সমস্যা চিহ্নিত করা হয়েছে।
+2. **স্মার্ট ডাইনামিক এমুলেটর লঞ্চার (`run_emulator.bat`):**
+   - [run_emulator.bat](../run_emulator.bat) আপগ্রেড করা হয়েছে। এটি যেকোনো পিসিতে (বাসা/অফিস) ইনস্টল থাকা AVD স্বয়ংক্রিয়ভাবে ডিটেক্ট (`emulator.exe -list-avds`) করে ১-ক্লিকে ফাস্ট বুট নিশ্চিত করে।
+   - জিরো-কনফিগারেশন ও জিরো-মেইনটেন্যান্স নিশ্চিত করা হয়েছে।
