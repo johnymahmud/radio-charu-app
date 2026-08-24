@@ -64,8 +64,26 @@ Whenever a new chat session starts or context is resumed, the AI Agent MUST:
 
 ---
 
+## 💻 Autonomous Terminal Execution & Multi-PC Self-Healing SOP
+
+Whenever the user asks to run the live emulator or test the app in any session or on any machine:
+
+1. **Autonomous Terminal Execution:**
+   - The AI Agent MUST proactively execute terminal commands to launch the emulator, resolve AVD lock conflicts, and run the app.
+   - Clean stale AVD lock files (`*.lock` in `~/.android/avd/*.avd/`) automatically if a previous session terminated uncleanly.
+
+2. **Multi-PC Setup & Environment Self-Healing:**
+   - If the project is opened on a new or different PC, run an environment audit (`flutter doctor -v`, `flutter devices`, `flutter emulators`).
+   - If Android Studio, Android SDK, or Platform Tools paths are missing, configure them via terminal (`flutter config`, PATH resolution).
+   - If no AVD/Emulator exists, use `avdmanager` / `sdkmanager` via terminal to install system images and create an AVD (e.g., Pixel 7), or guide the user step-by-step.
+   - If Gradle, Java, or Flutter dependencies are out of sync, automatically run `flutter pub get` and sync tools.
+   - **Reporting Rule:** Always report detected environment status clearly to the user, autonomously solve what can be automated via CLI, and explicitly specify any manual action required by the user (e.g., USB Debugging permission click, Hardware Virtualization in BIOS).
+
+---
+
 ## 🔄 End-of-Session Handover Protocol
 At the end of any significant coding session:
 1. Update [docs/PROJECT_STATE.md](docs/PROJECT_STATE.md) with newly completed tasks and next priorities.
 2. Update [docs/ACTIVITY_LOG.md](docs/ACTIVITY_LOG.md) with a short session summary.
 3. Sync technical changes into [docs/AUDIO_STREAMING_BLUEPRINT.md](docs/AUDIO_STREAMING_BLUEPRINT.md) and [docs/SYSTEM_WALKTHROUGH_NON_TECH.md](docs/SYSTEM_WALKTHROUGH_NON_TECH.md).
+
