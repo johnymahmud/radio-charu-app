@@ -9,6 +9,7 @@ import 'package:app_settings/app_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'community_panel.dart';
+import 'widgets/radio_logo.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,12 +67,14 @@ class _RadioHomePageState extends State<RadioHomePage>
       'https://sapircast.caster.fm:17055/admin/publicstats.json';
 
   static const String _mountPoint = '/hQJ4i';
-  
-  static final Uri _facebookUrl =
-    Uri.parse('https://www.facebook.com/CharuTV/');
 
-  static final Uri _youtubeUrl =
-    Uri.parse('https://www.youtube.com/@RadioCharu');
+  static final Uri _facebookUrl = Uri.parse(
+    'https://www.facebook.com/CharuTV/',
+  );
+
+  static final Uri _youtubeUrl = Uri.parse(
+    'https://www.youtube.com/@RadioCharu',
+  );
 
   late final WebViewController _playerController;
   Timer? _statusTimer;
@@ -89,14 +92,19 @@ class _RadioHomePageState extends State<RadioHomePage>
   bool _wasBackgrounded = false;
 
   static const String _backgroundPlaybackDoneKey =
-    'background_playback_setup_done';
+      'background_playback_setup_done';
   static const String _backgroundPlaybackSnoozeUntilKey =
-    'background_playback_snooze_until';
+      'background_playback_snooze_until';
 
-final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
+  final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
 
-bool _waitingForBackgroundSettings = false;
-bool _backgroundDialogOpen = false;
+  bool _waitingForBackgroundSettings = false;
+  bool _backgroundDialogOpen = false;
+
+  bool _directPlayerMode = false;
+  bool _directPlayerOpening = false;
+  bool _playbackTrackingReady = false;
+  bool _smartResumeRunning = false;
 
   @override
   void initState() {
@@ -115,11 +123,52 @@ bool _backgroundDialogOpen = false;
               _playerLoading = true;
             });
           },
-          onPageFinished: (_) {
+          onPageFinished: (String url) {
             if (!mounted) return;
+
+            final bool isDirectCasterPage = url.startsWith(
+              'https://widgets.cloud.caster.fm/player/',
+            );
+
             setState(() {
               _playerLoading = false;
+              _directPlayerMode = isDirectCasterPage;
+              _playbackTrackingReady = false;
+
+              if (isDirectCasterPage) {
+                _directPlayerOpening = false;
+              }
             });
+
+            if (isDirectCasterPage) {
+              unawaited(
+                Future<void>.delayed(
+                  const Duration(milliseconds: 500),
+                  () async {
+                    if (!mounted || !_directPlayerMode) return;
+
+                    await _installPlaybackTracking();
+                  },
+                ),
+              );
+
+              return;
+            }
+
+            if (url.startsWith(_playerUrl) && !_directPlayerOpening) {
+              _directPlayerOpening = true;
+
+              unawaited(
+                Future<void>.delayed(
+                  const Duration(milliseconds: 900),
+                  () async {
+                    if (!mounted) return;
+
+                    await _openDirectCasterPlayer();
+                  },
+                ),
+              );
+            }
           },
         ),
       )
@@ -133,306 +182,276 @@ bool _backgroundDialogOpen = false;
     );
   }
 
-Future<void> _scheduleBackgroundPlaybackPrompt() async {
-  final bool setupDone =
-      await _preferences.getBool(_backgroundPlaybackDoneKey) ?? false;
+  Future<void> _scheduleBackgroundPlaybackPrompt() async {
+    final bool setupDone =
+        await _preferences.getBool(_backgroundPlaybackDoneKey) ?? false;
 
-  if (setupDone) return;
+    if (setupDone) return;
 
-  final int snoozeUntil = await _preferences.getInt(
-        _backgroundPlaybackSnoozeUntilKey,
-      ) ??
-      0;
+    final int snoozeUntil =
+        await _preferences.getInt(_backgroundPlaybackSnoozeUntilKey) ?? 0;
 
-  if (DateTime.now().millisecondsSinceEpoch < snoozeUntil) {
-    return;
+    if (DateTime.now().millisecondsSinceEpoch < snoozeUntil) {
+      return;
+    }
+
+    await Future<void>.delayed(const Duration(milliseconds: 1500));
+
+    if (!mounted || _backgroundDialogOpen) return;
+
+    await _showBackgroundPlaybackDialog();
   }
 
-  await Future<void>.delayed(
-    const Duration(milliseconds: 1500),
-  );
+  Future<void> _showBackgroundPlaybackDialog() async {
+    if (!mounted || _backgroundDialogOpen) return;
 
-  if (!mounted || _backgroundDialogOpen) return;
+    _backgroundDialogOpen = true;
 
-  await _showBackgroundPlaybackDialog();
-}
-
-Future<void> _showBackgroundPlaybackDialog() async {
-  if (!mounted || _backgroundDialogOpen) return;
-
-  _backgroundDialogOpen = true;
-
-  await showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (BuildContext dialogContext) {
-      return Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(26),
-        ),
-        child: Stack(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(22, 26, 22, 22),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 58,
-                    height: 58,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFE7F8EC),
-                      shape: BoxShape.circle,
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(26),
+          ),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 26, 22, 22),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 58,
+                      height: 58,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFE7F8EC),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.lock_clock_rounded,
+                        color: folkGreen,
+                        size: 32,
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.lock_clock_rounded,
-                      color: folkGreen,
-                      size: 32,
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Screen Lock-এও Radio শুনুন',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 21,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Screen Lock-এও Radio শুনুন',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 21,
-                      fontWeight: FontWeight.w900,
+                    const SizedBox(height: 12),
+                    const Text(
+                      'স্ক্রিন লক থাকলেও রেডিও চালু রাখতে Radio Charu-এর Battery Settings থেকে “Allow background activity”, “Allow background usage” অথবা “Unrestricted” চালু করুন।',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 14, height: 1.45),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'স্ক্রিন লক থাকলেও রেডিও চালু রাখতে Radio Charu-এর Battery Settings থেকে “Allow background activity”, “Allow background usage” অথবা “Unrestricted” চালু করুন।',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      height: 1.45,
+                    const SizedBox(height: 8),
+                    const Text(
+                      'এই সেটিং সাধারণত একবারই করতে হয়।',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'এই সেটিং সাধারণত একবারই করতে হয়।',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () {
-                        Navigator.of(dialogContext).pop();
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop();
 
-                        unawaited(
-                          _openBackgroundPlaybackSettings(),
-                        );
-                      },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: folkGreen,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 14,
+                          unawaited(_openBackgroundPlaybackSettings());
+                        },
+                        style: FilledButton.styleFrom(
+                          backgroundColor: folkGreen,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
-                      ),
-                      icon: const Icon(
-                        Icons.settings_rounded,
-                      ),
-                      label: const Text(
-                        'OPEN SETTINGS',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.4,
+                        icon: const Icon(Icons.settings_rounded),
+                        label: const Text(
+                          'OPEN SETTINGS',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.4,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  tooltip: 'Close',
+                  onPressed: () async {
+                    final int snoozeUntil = DateTime.now()
+                        .add(const Duration(days: 3))
+                        .millisecondsSinceEpoch;
+
+                    await _preferences.setInt(
+                      _backgroundPlaybackSnoozeUntilKey,
+                      snoozeUntil,
+                    );
+
+                    if (!dialogContext.mounted) return;
+
+                    Navigator.of(dialogContext).pop();
+                  },
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    _backgroundDialogOpen = false;
+  }
+
+  Future<void> _showBackgroundPlaybackConfirmationDialog() async {
+    if (!mounted || _backgroundDialogOpen) return;
+
+    _backgroundDialogOpen = true;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          icon: const Icon(
+            Icons.check_circle_outline_rounded,
+            color: folkGreen,
+            size: 46,
+          ),
+          title: const Text(
+            'Background Playback চালু করেছেন?',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.w900),
+          ),
+          content: const Text(
+            'Radio Charu-এর Battery Settings থেকে Background Activity অথবা Background Usage চালু করা হয়ে থাকলে DONE চাপুন।',
+            textAlign: TextAlign.center,
+            style: TextStyle(height: 1.4),
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            OutlinedButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+
+                unawaited(_openBackgroundPlaybackSettings());
+              },
+              child: const Text(
+                'OPEN AGAIN',
+                style: TextStyle(fontWeight: FontWeight.w800),
               ),
             ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: IconButton(
-                tooltip: 'Close',
-                onPressed: () async {
-                  final int snoozeUntil = DateTime.now()
-                      .add(const Duration(days: 3))
-                      .millisecondsSinceEpoch;
+            FilledButton(
+              onPressed: () async {
+                await _preferences.setBool(_backgroundPlaybackDoneKey, true);
 
-                  await _preferences.setInt(
-                    _backgroundPlaybackSnoozeUntilKey,
-                    snoozeUntil,
-                  );
+                if (!dialogContext.mounted) return;
 
-                  if (!dialogContext.mounted) return;
+                Navigator.of(dialogContext).pop();
 
-                  Navigator.of(dialogContext).pop();
-                },
-                icon: const Icon(
-                  Icons.close_rounded,
-                ),
+                if (!mounted) return;
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Background playback setup সম্পন্ন হয়েছে।'),
+                    duration: Duration(seconds: 3),
+                  ),
+                );
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: folkGreen,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text(
+                'DONE',
+                style: TextStyle(fontWeight: FontWeight.w900),
               ),
             ),
           ],
-        ),
-      );
-    },
-  );
-
-  _backgroundDialogOpen = false;
-}
-
-Future<void> _showBackgroundPlaybackConfirmationDialog() async {
-  if (!mounted || _backgroundDialogOpen) return;
-
-  _backgroundDialogOpen = true;
-
-  await showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (BuildContext dialogContext) {
-      return AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
-        icon: const Icon(
-          Icons.check_circle_outline_rounded,
-          color: folkGreen,
-          size: 46,
-        ),
-        title: const Text(
-          'Background Playback চালু করেছেন?',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        content: const Text(
-          'Radio Charu-এর Battery Settings থেকে Background Activity অথবা Background Usage চালু করা হয়ে থাকলে DONE চাপুন।',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            height: 1.4,
-          ),
-        ),
-        actionsAlignment: MainAxisAlignment.center,
-        actions: [
-          OutlinedButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-
-              unawaited(
-                _openBackgroundPlaybackSettings(),
-              );
-            },
-            child: const Text(
-              'OPEN AGAIN',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          FilledButton(
-            onPressed: () async {
-              await _preferences.setBool(
-                _backgroundPlaybackDoneKey,
-                true,
-              );
-
-              if (!dialogContext.mounted) return;
-
-              Navigator.of(dialogContext).pop();
-
-              if (!mounted) return;
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Background playback setup সম্পন্ন হয়েছে।',
-                  ),
-                  duration: Duration(seconds: 3),
-                ),
-              );
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: folkGreen,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text(
-              'DONE',
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-        ],
-      );
-    },
-  );
-
-  _backgroundDialogOpen = false;
-}
-
-Future<void> _openBackgroundPlaybackSettings() async {
-  _waitingForBackgroundSettings = true;
-
-  try {
-    await AppSettings.openAppSettings(
-      type: AppSettingsType.settings,
+        );
+      },
     );
-  } catch (error) {
-    _waitingForBackgroundSettings = false;
 
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Settings খোলা যায়নি। ফোনের Settings থেকে Radio Charu-এর Battery অথবা Background Activity চালু করুন।',
-        ),
-        duration: Duration(seconds: 4),
-      ),
-    );
-  }
-}
-
-@override
-void didChangeAppLifecycleState(AppLifecycleState state) {
-  super.didChangeAppLifecycleState(state);
-
-  if (state == AppLifecycleState.paused ||
-      state == AppLifecycleState.inactive ||
-      state == AppLifecycleState.hidden) {
-    _wasBackgrounded = true;
-    return;
+    _backgroundDialogOpen = false;
   }
 
- if (state == AppLifecycleState.resumed && _wasBackgrounded) {
-  _wasBackgrounded = false;
+  Future<void> _openBackgroundPlaybackSettings() async {
+    _waitingForBackgroundSettings = true;
 
-  if (!mounted) return;
+    try {
+      await AppSettings.openAppSettings(type: AppSettingsType.settings);
+    } catch (error) {
+      _waitingForBackgroundSettings = false;
 
-  if (_waitingForBackgroundSettings) {
-    _waitingForBackgroundSettings = false;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
-      unawaited(
-        _showBackgroundPlaybackConfirmationDialog(),
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Settings খোলা যায়নি। ফোনের Settings থেকে Radio Charu-এর Battery অথবা Background Activity চালু করুন।',
+          ),
+          duration: Duration(seconds: 4),
+        ),
       );
-    });
+    }
   }
-}
-}
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      _wasBackgrounded = true;
+      return;
+    }
+
+    if (state == AppLifecycleState.resumed && _wasBackgrounded) {
+      _wasBackgrounded = false;
+
+      if (!mounted) return;
+
+      if (_waitingForBackgroundSettings) {
+        _waitingForBackgroundSettings = false;
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+
+          unawaited(_showBackgroundPlaybackConfirmationDialog());
+        });
+
+        return;
+      }
+
+      unawaited(_attemptSmartResume());
+    }
+  }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-   _statusTimer?.cancel();
-  super.dispose();
-}
+    _statusTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> _loadRadioStatus() async {
     if (mounted) {
@@ -497,7 +516,8 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
             ? 'RADIO CHARU'
             : rawName;
 
-        _description = rawDescription.isEmpty ||
+        _description =
+            rawDescription.isEmpty ||
                 rawDescription == 'Unspecified description'
             ? 'বাংলাদেশ থেকে ভালোবাসার সম্প্রচার'
             : rawDescription;
@@ -521,22 +541,22 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
       });
     }
   }
-  Future<void> _openSocialLink(Uri url) async {
-  final bool opened = await launchUrl(
-    url,
-    mode: LaunchMode.externalApplication,
-  );
 
-  if (!opened && mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'লিংকটি খোলা যাচ্ছে না। আবার চেষ্টা করুন।',
-        ),
-      ),
+  Future<void> _openSocialLink(Uri url) async {
+    final bool opened = await launchUrl(
+      url,
+      mode: LaunchMode.externalApplication,
     );
+
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('লিংকটি খোলা যাচ্ছে না। আবার চেষ্টা করুন।'),
+        ),
+      );
+    }
   }
-}
+
   Future<void> _reloadPlayer() async {
     setState(() {
       _playerLoading = true;
@@ -546,27 +566,351 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
     await _loadRadioStatus();
   }
 
+  Future<void> _installPlaybackTracking() async {
+    if (!_directPlayerMode) return;
+
+    try {
+      await _playerController.runJavaScript(r'''
+      (() => {
+        if (window.__radioTrackingInstalled) {
+          return;
+        }
+
+        window.__radioTrackingInstalled = true;
+        window.__radioUserWantsPlayback = false;
+        window.__radioLastUserAction = 'none';
+        window.__radioLastUserActionAt = 0;
+
+        document.addEventListener(
+          'click',
+          (event) => {
+            const target =
+              event.target instanceof Element
+                ? event.target
+                : null;
+
+            const button = target
+              ? target.closest(
+                  'button, [role="button"]'
+                )
+              : null;
+
+            if (!button) return;
+
+            const text = (
+              button.innerText ||
+              button.getAttribute('aria-label') ||
+              button.getAttribute('title') ||
+              ''
+            )
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            if (/^play$/i.test(text)) {
+              window.__radioUserWantsPlayback = true;
+              window.__radioLastUserAction = 'play';
+              window.__radioLastUserActionAt = Date.now();
+            }
+
+            if (/^pause$/i.test(text)) {
+              window.__radioUserWantsPlayback = false;
+              window.__radioLastUserAction = 'pause';
+              window.__radioLastUserActionAt = Date.now();
+            }
+          },
+          true
+        );
+      })()
+      ''');
+
+      if (!mounted) return;
+
+      setState(() {
+        _playbackTrackingReady = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _playbackTrackingReady = false;
+      });
+    }
+  }
+
+  Future<bool> _attemptSmartResume() async {
+    if (!mounted ||
+        !_directPlayerMode ||
+        !_playbackTrackingReady ||
+        _smartResumeRunning) {
+      return false;
+    }
+
+    _smartResumeRunning = true;
+
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+
+      if (!mounted || !_directPlayerMode) {
+        return false;
+      }
+
+      final Object rawResult = await _playerController
+          .runJavaScriptReturningResult(r'''
+      (() => {
+        const audio = document.querySelector('audio');
+
+        const wantsPlayback =
+          window.__radioUserWantsPlayback === true;
+
+        const buttons = Array.from(
+          document.querySelectorAll(
+            'button, [role="button"]'
+          )
+        );
+
+        const isVisible = (element) => {
+          const style =
+            window.getComputedStyle(element);
+
+          return style.display !== 'none' &&
+              style.visibility !== 'hidden' &&
+              element.offsetParent !== null;
+        };
+
+        const playButton = buttons.find(
+          (button) => {
+            const text = (
+              button.innerText ||
+              button.getAttribute('aria-label') ||
+              button.getAttribute('title') ||
+              ''
+            )
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            return /^play$/i.test(text) &&
+                isVisible(button);
+          }
+        );
+
+        const result = {
+          audioFound: Boolean(audio),
+          resumeWanted: wantsPlayback,
+          beforePaused:
+            audio ? audio.paused : null,
+          action: 'none',
+          error: '',
+        };
+
+        if (!audio) {
+          result.action = 'audio-not-found';
+          return JSON.stringify(result);
+        }
+
+        if (!wantsPlayback) {
+          result.action = 'resume-not-wanted';
+          return JSON.stringify(result);
+        }
+
+        if (!audio.paused) {
+          result.action = 'already-playing';
+          return JSON.stringify(result);
+        }
+
+        window.__radioAutoResumeError = '';
+
+        if (playButton) {
+          playButton.click();
+          result.action = 'clicked-visible-play';
+          return JSON.stringify(result);
+        }
+
+        try {
+          const playResult = audio.play();
+
+          if (playResult && playResult.catch) {
+            playResult.catch((error) => {
+              window.__radioAutoResumeError =
+                String(error);
+            });
+          }
+
+          result.action = 'called-audio-play';
+        } catch (error) {
+          result.action = 'play-call-failed';
+          result.error = String(error);
+        }
+
+        return JSON.stringify(result);
+      })()
+      ''');
+
+      String resultText = rawResult.toString();
+
+      try {
+        final dynamic firstDecode = jsonDecode(resultText);
+
+        if (firstDecode is String) {
+          resultText = firstDecode;
+        }
+      } catch (_) {}
+
+      Map<String, dynamic>? result;
+
+      try {
+        final dynamic decoded = jsonDecode(resultText);
+
+        if (decoded is Map<String, dynamic>) {
+          result = decoded;
+        }
+      } catch (_) {}
+
+      if (result == null) {
+        return false;
+      }
+
+      final String action = result['action']?.toString() ?? '';
+
+      if (action == 'already-playing') {
+        return true;
+      }
+
+      if (action != 'clicked-visible-play' && action != 'called-audio-play') {
+        return false;
+      }
+
+      await Future<void>.delayed(const Duration(milliseconds: 2600));
+
+      if (!mounted || !_directPlayerMode) {
+        return false;
+      }
+
+      final Object verificationRaw = await _playerController
+          .runJavaScriptReturningResult(r'''
+      (() => {
+        const audio = document.querySelector('audio');
+
+        return JSON.stringify({
+          audioFound: Boolean(audio),
+          paused: audio ? audio.paused : null,
+          readyState:
+            audio ? audio.readyState : null,
+          networkState:
+            audio ? audio.networkState : null,
+          error:
+            window.__radioAutoResumeError || '',
+        });
+      })()
+      ''');
+
+      String verificationText = verificationRaw.toString();
+
+      try {
+        final dynamic firstDecode = jsonDecode(verificationText);
+
+        if (firstDecode is String) {
+          verificationText = firstDecode;
+        }
+      } catch (_) {}
+
+      try {
+        final dynamic verification = jsonDecode(verificationText);
+
+        if (verification is Map<String, dynamic>) {
+          return verification['audioFound'] == true &&
+              verification['paused'] == false;
+        }
+      } catch (_) {}
+
+      return false;
+    } catch (_) {
+      return false;
+    } finally {
+      _smartResumeRunning = false;
+    }
+  }
+
+  Future<void> _openDirectCasterPlayer() async {
+    try {
+      final Object rawResult = await _playerController
+          .runJavaScriptReturningResult(r'''
+      (() => {
+        const frame = document.querySelector(
+          'iframe[src*="widgets.cloud.caster.fm"]'
+        );
+
+        return frame ? frame.src : '';
+      })()
+      ''');
+
+      String widgetUrl = rawResult.toString().trim();
+
+      try {
+        final dynamic decoded = jsonDecode(widgetUrl);
+
+        if (decoded is String) {
+          widgetUrl = decoded;
+        }
+      } catch (_) {
+        widgetUrl = widgetUrl.replaceAll('"', '');
+      }
+
+      if (!widgetUrl.startsWith('https://widgets.cloud.caster.fm/')) {
+        throw Exception('Caster widget URL পাওয়া যায়নি।');
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _playerLoading = true;
+      });
+
+      await _playerController.loadRequest(Uri.parse(widgetUrl));
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _playerLoading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'রেডিও প্লেয়ার চালু করা যায়নি। আবার চেষ্টা করুন। ($error)',
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: RefreshIndicator(
-          color: folkRed,
-          backgroundColor: folkWhite,
-          onRefresh: _loadRadioStatus,
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            children: [
-              _buildHeader(),
-              const _FolkColorStrip(),
-              _buildStatusSection(),
-              _buildPlayerSection(),
-              _buildStationSection(),
-              _buildSocialSection(),
-              const CommunityPanel(),
-              const SizedBox(height: 28),
-            ],
-          ),
+        child: Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: RefreshIndicator(
+                color: folkRed,
+                backgroundColor: folkWhite,
+                onRefresh: _loadRadioStatus,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    const _FolkColorStrip(),
+                    _buildStatusSection(),
+                    _buildPlayerSection(),
+                    _buildSocialSection(),
+                    const CommunityPanel(),
+                    _buildAboutButton(),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -584,16 +928,9 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
             decoration: BoxDecoration(
               color: folkYellow,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: folkWhite,
-                width: 3,
-              ),
+              border: Border.all(color: folkWhite, width: 3),
             ),
-            child: const Icon(
-              Icons.radio_rounded,
-              color: folkRed,
-              size: 34,
-            ),
+            child: const RadioLogo(),
           ),
           const SizedBox(width: 12),
           const Expanded(
@@ -622,17 +959,11 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 11,
-              vertical: 8,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
             decoration: BoxDecoration(
               color: _onAir ? folkRed : folkOrange,
               borderRadius: BorderRadius.circular(30),
-              border: Border.all(
-                color: folkWhite,
-                width: 2,
-              ),
+              border: Border.all(color: folkWhite, width: 2),
             ),
             child: Row(
               children: [
@@ -741,10 +1072,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                 IconButton(
                   tooltip: 'Refresh status',
                   onPressed: _checkingStatus ? null : _loadRadioStatus,
-                  icon: const Icon(
-                    Icons.refresh_rounded,
-                    color: folkGreen,
-                  ),
+                  icon: const Icon(Icons.refresh_rounded, color: folkGreen),
                 ),
               ],
             ),
@@ -756,25 +1084,20 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
 
   Widget _buildPlayerSection() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _SectionTitle(
-            icon: Icons.play_circle_fill_rounded,
-            title: 'LIVE PLAYER',
-            color: folkRed,
-          ),
-          const SizedBox(height: 10),
+          _AnimatedRadioSpectrum(isActive: _onAir),
+
+          const SizedBox(height: 12),
+
           Container(
             height: 405,
             decoration: BoxDecoration(
               color: folkWhite,
               borderRadius: BorderRadius.circular(22),
-              border: Border.all(
-                color: folkRed,
-                width: 3,
-              ),
+              border: Border.all(color: folkRed, width: 3),
               boxShadow: const [
                 BoxShadow(
                   color: folkYellow,
@@ -787,9 +1110,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
               borderRadius: BorderRadius.circular(18),
               child: Stack(
                 children: [
-                  WebViewWidget(
-                    controller: _playerController,
-                  ),
+                  WebViewWidget(controller: _playerController),
                   if (_playerLoading)
                     Container(
                       color: folkCream,
@@ -797,9 +1118,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                       child: const Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          CircularProgressIndicator(
-                            color: folkRed,
-                          ),
+                          CircularProgressIndicator(color: folkRed),
                           SizedBox(height: 12),
                           Text(
                             'Player loading...',
@@ -840,7 +1159,109 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
     );
   }
 
-  Widget _buildStationSection() {
+  Widget _buildAboutButton() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: TextButton.icon(
+          onPressed: _showStationAboutDialog,
+          icon: const Icon(Icons.info_outline_rounded, size: 16),
+          label: const Text(
+            'ABOUT',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+            ),
+          ),
+          style: TextButton.styleFrom(
+            foregroundColor: folkGreen,
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showStationAboutDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 28, 22, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _SectionTitle(
+                      icon: Icons.info_rounded,
+                      title: 'ABOUT THE STATION',
+                      color: folkGreen,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      _stationName,
+                      style: const TextStyle(
+                        color: folkRed,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _description,
+                      style: const TextStyle(
+                        color: folkInk,
+                        height: 1.5,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: folkGreen,
+                          side: const BorderSide(color: folkGreen, width: 2),
+                        ),
+                        child: const Text(
+                          'CLOSE',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Positioned(
+                top: 6,
+                right: 6,
+                child: IconButton(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSocialSection() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
       child: Container(
@@ -848,145 +1269,88 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
         decoration: BoxDecoration(
           color: folkWhite,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: folkGreen,
-            width: 3,
-          ),
+          border: Border.all(color: folkOrange, width: 3),
+          boxShadow: const [
+            BoxShadow(color: folkYellow, offset: Offset(6, 6), blurRadius: 0),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const _SectionTitle(
-              icon: Icons.info_rounded,
-              title: 'ABOUT THE STATION',
-              color: folkGreen,
-            ),
-            const SizedBox(height: 14),
-            Text(
-              _stationName,
-              style: const TextStyle(
-                color: folkRed,
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-              ),
+              icon: Icons.connect_without_contact_rounded,
+              title: 'FOLLOW RADIO CHARU',
+              color: folkOrange,
             ),
             const SizedBox(height: 8),
-            Text(
-              _description,
-              style: const TextStyle(
+            const Text(
+              'আমাদের সামাজিক যোগাযোগমাধ্যমে যুক্ত থাকুন',
+              style: TextStyle(
                 color: folkInk,
-                height: 1.5,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
               ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => _openSocialLink(_facebookUrl),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: folkGreen,
+                      foregroundColor: folkWhite,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 15,
+                        horizontal: 10,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: const Icon(Icons.facebook_rounded, size: 24),
+                    label: const Text(
+                      'FACEBOOK',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => _openSocialLink(_youtubeUrl),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: folkRed,
+                      foregroundColor: folkWhite,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 15,
+                        horizontal: 10,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: const Icon(Icons.smart_display_rounded, size: 25),
+                    label: const Text(
+                      'YOUTUBE',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
       ),
     );
   }
-Widget _buildSocialSection() {
-  return Padding(
-    padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
-    child: Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: folkWhite,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: folkOrange,
-          width: 3,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: folkYellow,
-            offset: Offset(6, 6),
-            blurRadius: 0,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _SectionTitle(
-            icon: Icons.connect_without_contact_rounded,
-            title: 'FOLLOW RADIO CHARU',
-            color: folkOrange,
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'আমাদের সামাজিক যোগাযোগমাধ্যমে যুক্ত থাকুন',
-            style: TextStyle(
-              color: folkInk,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: () => _openSocialLink(_facebookUrl),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: folkGreen,
-                    foregroundColor: folkWhite,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 15,
-                      horizontal: 10,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  icon: const Icon(
-                    Icons.facebook_rounded,
-                    size: 24,
-                  ),
-                  label: const Text(
-                    'FACEBOOK',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: () => _openSocialLink(_youtubeUrl),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: folkRed,
-                    foregroundColor: folkWhite,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 15,
-                      horizontal: 10,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  icon: const Icon(
-                    Icons.smart_display_rounded,
-                    size: 25,
-                  ),
-                  label: const Text(
-                    'YOUTUBE',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    ),
-  );
-}
+
   Widget _buildCommunityPreview() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
@@ -995,10 +1359,7 @@ Widget _buildSocialSection() {
         decoration: BoxDecoration(
           color: folkYellow,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: folkInk,
-            width: 3,
-          ),
+          border: Border.all(color: folkInk, width: 3),
         ),
         child: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1067,19 +1428,12 @@ class _StatusBox extends StatelessWidget {
       decoration: BoxDecoration(
         color: folkWhite,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: color,
-          width: 3,
-        ),
+        border: Border.all(color: color, width: 3),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            icon,
-            color: color,
-            size: 25,
-          ),
+          Icon(icon, color: color, size: 25),
           const SizedBox(height: 6),
           Text(
             label,
@@ -1107,6 +1461,165 @@ class _StatusBox extends StatelessWidget {
   }
 }
 
+class _AnimatedRadioSpectrum extends StatefulWidget {
+  const _AnimatedRadioSpectrum({required this.isActive});
+
+  final bool isActive;
+
+  @override
+  State<_AnimatedRadioSpectrum> createState() => _AnimatedRadioSpectrumState();
+}
+
+class _AnimatedRadioSpectrumState extends State<_AnimatedRadioSpectrum>
+    with SingleTickerProviderStateMixin {
+  static const int _barCount = 30;
+
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1350),
+    );
+
+    if (widget.isActive) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedRadioSpectrum oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.isActive == widget.isActive) return;
+
+    if (widget.isActive) {
+      _controller.repeat();
+    } else {
+      _controller
+        ..stop()
+        ..value = 0.0;
+    }
+  }
+
+  double _barHeight(int index) {
+    if (!widget.isActive) {
+      return 8.0 + ((index % 5) * 1.6);
+    }
+
+    final double phase = (_controller.value + ((index * 0.37) % 1.0)) % 1.0;
+
+    final double primaryWave = 1.0 - ((phase * 2.0) - 1.0).abs();
+
+    final double shiftedPhase = (phase + 0.37) % 1.0;
+
+    final double secondaryWave = 1.0 - ((shiftedPhase * 2.0) - 1.0).abs();
+
+    return 8.0 + (primaryWave * 28.0) + (secondaryWave * 10.0);
+  }
+
+  Color _barColor(int index) {
+    switch (index % 3) {
+      case 0:
+        return folkRed;
+      case 1:
+        return folkYellow;
+      default:
+        return folkGreen;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 96,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF10351F),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: widget.isActive ? folkGreen : Colors.white24,
+          width: 2,
+        ),
+        boxShadow: const [
+          BoxShadow(color: folkYellow, offset: Offset(5, 5), blurRadius: 0),
+        ],
+      ),
+      child: Column(
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.play_circle_fill_rounded,
+                color: folkGreen,
+                size: 20,
+              ),
+              SizedBox(width: 6),
+              Text(
+                'LIVE PLAYER',
+                style: TextStyle(
+                  color: folkGreen,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Expanded(
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (BuildContext context, Widget? child) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: List<Widget>.generate(_barCount, (
+                    int index,
+                  ) {
+                    final Color color = _barColor(index);
+
+                    return Expanded(
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Container(
+                          width: 5,
+                          height: _barHeight(index),
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(99),
+                            boxShadow: widget.isActive
+                                ? [
+                                    BoxShadow(
+                                      color: color.withAlpha(90),
+                                      blurRadius: 6,
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle({
     required this.icon,
@@ -1122,11 +1635,7 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(
-          icon,
-          color: color,
-          size: 25,
-        ),
+        Icon(icon, color: color, size: 25),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
