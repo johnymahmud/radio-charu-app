@@ -54,6 +54,7 @@ Whenever a new chat session starts or context is resumed, the AI Agent MUST:
 | **Community Panel** | [lib/community_panel.dart](lib/community_panel.dart) | Firebase Firestore shouts, comments, admin auth |
 | **Web Bridge** | [docs/index.html](docs/index.html) | GitHub Pages host for Caster.fm embed player |
 | **Security Rules** | [firestore.rules](firestore.rules) | Cloud Firestore security rules for comments/admins |
+| **1-Click Launcher** | [run_app.bat](run_app.bat) | All-in-one 1-click AVD boot, lock cleaner, & Flutter runner |
 
 ---
 

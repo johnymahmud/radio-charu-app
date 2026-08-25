@@ -1,7 +1,7 @@
 @echo off
-title Radio Charu - Multi-PC Smart Android Emulator Launcher
+title Radio Charu - 1-Click Smart App and Emulator Launcher
 echo ====================================================
-echo Radio Charu - Multi-PC Smart Emulator Launcher
+echo   Radio Charu - 1-Click Smart Launcher and Runner
 echo ====================================================
 echo.
 
@@ -16,7 +16,22 @@ if not exist "%EMULATOR_PATH%" (
     exit /b 1
 )
 
-:: Dynamically find installed AVDs on this PC (Priority: Pixel_7 / Pixel_8 -> Any available AVD)
+:: Step 1: Check if an Android device/emulator is ALREADY connected and ready
+set "RUNNING_DEVICE="
+for /f "tokens=1,2" %%a in ('"%ADB_PATH%" devices 2^>nul ^| findstr /v "List"') do (
+    if "%%b"=="device" (
+        set "RUNNING_DEVICE=%%a"
+    )
+)
+
+if not "%RUNNING_DEVICE%"=="" (
+    echo [OK] Active Android device detected: %RUNNING_DEVICE%
+    echo [INFO] Emulator is already running! Skipping launch step...
+    echo.
+    goto run_flutter
+)
+
+:: Step 2: Dynamically detect installed AVD (Priority: Pixel_8 / Pixel_7 -> Any available AVD)
 set "TARGET_AVD="
 for /f "tokens=*" %%i in ('"%EMULATOR_PATH%" -list-avds 2^>nul') do (
     if not defined TARGET_AVD set "TARGET_AVD=%%i"
@@ -33,8 +48,9 @@ if "%TARGET_AVD%"=="" (
 )
 
 echo [INFO] Detected AVD on this PC: %TARGET_AVD%
-echo [INFO] Cleaning stale lock files...
+echo [INFO] Cleaning stale lock files and lock folders...
 del /s /q "%USERPROFILE%\.android\avd\%TARGET_AVD%.avd\*.lock" 2>nul
+for /d /r "%USERPROFILE%\.android\avd\%TARGET_AVD%.avd" %%d in (*.lock) do rmdir /s /q "%%d" 2>nul
 
 echo [INFO] Launching %TARGET_AVD% Emulator in GUI window...
 start "" "%EMULATOR_PATH%" -avd %TARGET_AVD% -no-snapshot-load -gpu host
@@ -56,3 +72,11 @@ echo.
 echo ====================================================
 echo [OK] %TARGET_AVD% is fully booted and ready on screen!
 echo ====================================================
+echo.
+
+:run_flutter
+echo [INFO] Launching Radio Charu app via Flutter Run...
+echo.
+flutter run
+
+pause
